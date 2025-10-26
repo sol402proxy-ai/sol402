@@ -4,6 +4,7 @@ import type { TokenBucketRateLimiter } from './lib/rate-limit.js';
 import type { TokenPerksService } from './lib/token.js';
 import type { LinkStore } from './lib/store.js';
 import type { AnalyticsStore } from './lib/analytics-store.js';
+import type { PaymentRequirements } from './lib/payments.js';
 import type { PaywallLink, PaymentChallenge, PriceQuote } from './types.js';
 
 export interface AppVariables {
@@ -18,6 +19,7 @@ export interface AppVariables {
   paymentReceipt?: string;
   paymentRequired?: boolean;
   paymentChallenge?: PaymentChallenge;
+  paymentRequirements?: PaymentRequirements;
 }
 
 export type HonoAppEnv = {

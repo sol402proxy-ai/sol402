@@ -30,6 +30,11 @@ export interface PaymentChallengeAccept {
   reason: string;
   discountApplied: boolean;
   freeQuotaUsed: boolean;
+  resource?: string;
+  mimeType?: string;
+  description?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extra?: Record<string, any>;
 }
 
 export interface PaymentChallenge {

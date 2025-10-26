@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.8.3",
+    "@payai/x402-solana": "0.1.0",
     "@solana/spl-token": "^0.4.7",
     "@solana/web3.js": "^1.95.4",
     "dotenv": "^16.4.5",

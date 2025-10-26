@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppConfig } from '../src/config.js';
 import { createApp } from '../src/server.js';
+import {
+  createEncodedPaymentHeader,
+  createFacilitatorFetchHandler,
+  FACILITATOR_URL,
+} from './helpers/facilitator.js';
 
 const testConfig: AppConfig = {
   adminApiKey: 'dev-admin-key',
   defaultPriceUsd: 0.01,
   priceDecimals: 6,
-  facilitatorUrl: 'https://facilitator.test',
+  facilitatorUrl: FACILITATOR_URL,
   merchantAddress: 'merchant-e2e',
   network: 'solana',
   usdcMint: 'mint-e2e',
@@ -40,43 +45,46 @@ describe('e2e 402 flow', () => {
 
     const { id } = await createLinkResponse.json<{ id: string }>();
 
-    const firstAttempt = await app.request(`http://localhost/p/${id}`, {
-      headers: {
-        accept: 'application/json',
-      },
-    });
-    expect(firstAttempt.status).toBe(402);
-    expect(firstAttempt.headers.get('x-payment-required')).toBe('true');
-
-    const challenge = await firstAttempt.json();
-    expect(challenge).toHaveProperty('challenge.accepts');
-
-    const fetchMock = vi.fn(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            'content-type': 'application/json',
-            'set-cookie': 'ignore',
-          },
-        })
-      )
+    const fetchMock = vi.fn(
+      createFacilitatorFetchHandler({
+        originResponse: () =>
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+              'set-cookie': 'ignore',
+            },
+          }),
+      })
     );
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.stubGlobal('fetch', fetchMock as any);
 
+      const firstAttempt = await app.request(`http://localhost/p/${id}`, {
+        headers: {
+          accept: 'application/json',
+        },
+      });
+      expect(firstAttempt.status).toBe(402);
+      expect(firstAttempt.headers.get('x-payment-required')).toBe('true');
+
+      const challenge = await firstAttempt.json();
+      expect(challenge).toHaveProperty('challenge.accepts');
+
+      const paymentHeader = createEncodedPaymentHeader();
+
       const paidResponse = await app.request(`http://localhost/p/${id}`, {
         headers: {
-          'x-payment': 'mock-receipt',
+          'x-payment': paymentHeader,
         },
       });
 
       expect(paidResponse.status).toBe(200);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
       expect(paidResponse.headers.get('set-cookie')).toBeNull();
-      expect(paidResponse.headers.get('x-payment-response')).toBe('mock-receipt');
+      expect(paidResponse.headers.get('x-payment-response')).toBe(paymentHeader);
     } finally {
       vi.unstubAllGlobals();
       vi.restoreAllMocks();

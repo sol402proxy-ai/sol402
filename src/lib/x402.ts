@@ -1,7 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppConfig } from '../config.js';
 import type { HonoAppEnv } from '../app-context.js';
-import type { PaywallLink, PaymentChallenge, PriceQuote } from '../types.js';
+import type { PaywallLink, PriceQuote } from '../types.js';
+import { PayAiSolanaPayments, type PaymentRequirements } from './payments.js';
 
 export interface PriceResolverArgs {
   link: PaywallLink;
@@ -14,12 +15,13 @@ export type PriceResolver = (args: PriceResolverArgs) => Promise<PriceQuote>;
 export interface PaywallMiddlewareOptions {
   config: AppConfig;
   resolvePrice: PriceResolver;
+  payments: PayAiSolanaPayments;
 }
 
 export function createPaywallMiddleware(
   options: PaywallMiddlewareOptions
 ): MiddlewareHandler<HonoAppEnv> {
-  const { config, resolvePrice } = options;
+  const { config, resolvePrice, payments } = options;
 
   return async (c, next) => {
     const link = c.get('link');
@@ -38,6 +40,7 @@ export function createPaywallMiddleware(
     const quote = await resolvePrice({ link, payer, config });
 
     c.set('priceQuote', quote);
+    const logger = c.get('logger');
 
     const paymentHeader = c.req.header('x-payment');
 
@@ -46,32 +49,106 @@ export function createPaywallMiddleware(
       return next();
     }
 
+    const requestUrl = c.req.url;
+    let requirements: PaymentRequirements;
+    try {
+      requirements = await payments.createRequirements({
+        requestUrl,
+        quote,
+      });
+    } catch (error) {
+      logger.error(
+        'Failed to create payment requirements',
+        {
+          linkId: link.id,
+          requestUrl,
+        },
+        error
+      );
+      return c.json(
+        {
+          error: 'payment_configuration_error',
+          message: 'Unable to prepare payment requirements.',
+        },
+        500
+      );
+    }
+
+    c.set('paymentRequirements', requirements);
+
+    const challenge = payments.buildChallenge(requirements, quote);
+    c.set('paymentChallenge', challenge);
+
     if (!paymentHeader) {
-      const challenge: PaymentChallenge = {
-        x402Version: 1,
-        facilitatorUrl: config.facilitatorUrl,
-        accepts: [
-          {
-            scheme: 'exact',
-            network: config.network,
-            asset: config.usdcMint,
-            payTo: config.merchantAddress,
-            maxAmountRequired: quote.priceAtomic.toString(),
-            priceUsd: quote.priceUsd,
-            reason: quote.reason,
-            discountApplied: quote.discountApplied,
-            freeQuotaUsed: quote.freeQuotaUsed,
-          },
-        ],
-      };
       c.header('X-Payment-Required', 'true');
       c.set('paymentRequired', true);
-      c.set('paymentChallenge', challenge);
-      c.status(402);
-      return next();
+      return c.json(
+        {
+          error: 'payment_required',
+          challenge,
+        },
+        402
+      );
+    }
+
+    let verified = false;
+    try {
+      verified = await payments.verify(paymentHeader, requirements);
+    } catch (error) {
+      logger.error(
+        'Payment verification failed',
+        {
+          linkId: link.id,
+          requestUrl,
+        },
+        error
+      );
+      return c.json(
+        {
+          error: 'payment_verification_failed',
+          challenge,
+        },
+        402
+      );
+    }
+
+    if (!verified) {
+      logger.warn('Payment invalid', {
+        linkId: link.id,
+        requestUrl,
+      });
+      c.header('X-Payment-Required', 'true');
+      c.set('paymentRequired', true);
+      return c.json(
+        {
+          error: 'payment_invalid',
+          challenge,
+        },
+        402
+      );
     }
 
     c.set('paymentReceipt', paymentHeader);
-    return next();
+
+    await next();
+
+    try {
+      const settled = await payments.settle(paymentHeader, requirements);
+      if (!settled) {
+        logger.warn('Payment settlement failed', {
+          linkId: link.id,
+          requestUrl,
+        });
+      }
+    } catch (error) {
+      logger.error(
+        'Payment settlement threw',
+        {
+          linkId: link.id,
+          requestUrl,
+        },
+        error
+      );
+    }
   };
 }

@@ -8,6 +8,7 @@ import { TokenBucketRateLimiter } from './lib/rate-limit.js';
 import { type Logger, createLogger } from './lib/logger.js';
 import { TokenPerksService } from './lib/token.js';
 import { createPaywallMiddleware } from './lib/x402.js';
+import { PayAiSolanaPayments } from './lib/payments.js';
 import adminRoutes from './routes/admin.js';
 import paywallRoutes from './routes/paywall.js';
 import siteRoutes from './routes/site.js';
@@ -63,6 +64,7 @@ export function createApp(options: CreateAppOptions = {}) {
       metricsPublisher,
       rpcEndpoint: config.solanaRpcUrl,
     });
+  const paymentService = new PayAiSolanaPayments(config);
 
   const rateLimiter =
     options.rateLimiter ??
@@ -170,6 +172,7 @@ export function createApp(options: CreateAppOptions = {}) {
 
   const paywallMiddleware = createPaywallMiddleware({
     config,
+    payments: paymentService,
     resolvePrice: async ({ link, payer, config: cfg }) => {
       const priceUsd = link.priceUsd ?? cfg.defaultPriceUsd;
       const baseAtomic = usdToAtomic(priceUsd, cfg.priceDecimals);
