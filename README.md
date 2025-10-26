@@ -134,8 +134,3 @@ Retrying the same URL with a valid `X-PAYMENT` header settles the charge and str
 - `public/` — marketing assets (`robots.txt`, `sitemap.xml`, `og.png`).
 - `tests/` — unit, integration, and end-to-end coverage for payments, security, and proxying.
 
-## Additional References
-
-- `AGENTS.md` — canonical build brief, marketing copy, and open task queue.
-- `IMPLEMENTATION_PLAN.md` — milestone history and acceptance criteria.
-- `CHANGELOG.md` — notable releases (latest: public beta launch).
