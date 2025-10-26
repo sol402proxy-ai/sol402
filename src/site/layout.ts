@@ -460,6 +460,14 @@ function renderHeader() {
         <a href="/link" data-analytics-click="view_link">Link</a>
         <a href="/token" data-analytics-click="view_token">Token</a>
         <a
+          href="https://github.com/sol402proxy-ai/sol402"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-analytics-click="view_github"
+        >
+          GitHub
+        </a>
+        <a
           class="primary"
           href="/link"
           data-analytics-click="click_create_link"
@@ -481,6 +489,13 @@ function renderFooter() {
         <a href="/legal/terms">Terms</a>
         <a href="/legal/privacy">Privacy</a>
         <a href="mailto:admin@sol402.app">Contact: admin@sol402.app</a>
+        <a
+          href="https://github.com/sol402proxy-ai/sol402"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub
+        </a>
       </div>
     </div>
   </footer>`;

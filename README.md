@@ -26,7 +26,7 @@ Sol402 turns any origin URL or API into a pay-per-request endpoint. The first re
 Provision a dedicated Solana RPC endpoint with Extrnode and keep the URL private. Set it in your local `.env` and Cloudflare secrets:
 
 ```bash
-SOLANA_RPC_URL=https://solana-mainnet.rpc.extrnode.com/b25026fe-8bd3-4f49-beba-64e75db8deb6
+SOLANA_RPC_URL=https://solana-mainnet.rpc.extrnode.com/<your-project-id>
 ```
 
 Never commit the raw URL; treat it as a secret when sharing configs or examples.
