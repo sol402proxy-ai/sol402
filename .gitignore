@@ -1,0 +1,22 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+.wrangler/
+.terraform/
+*.log
+# Local env files
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+wrangler.secrets.toml
+wrangler.toml.local
+
+# Build artifacts
+*.tsbuildinfo
+*.tgz
+
+# Editor directories and files
+.idea/
+.vscode/

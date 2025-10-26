@@ -1,0 +1,42 @@
+name = "sol402-proxy"
+main = "src/worker.ts"
+compatibility_date = "2024-10-26"
+account_id = "33962d022c62720a4b770ae139fa918d"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+routes = [
+  { pattern = "sol402.app/*", zone_name = "sol402.app" }
+]
+
+[[kv_namespaces]]
+binding = "LINKS_KV"
+id = "dc4a013036af4623b841149fe83928a8"
+preview_id = "5086f451bc8d414da316244b2f56ab36"
+
+[[kv_namespaces]]
+binding = "ANALYTICS_KV"
+id = "ab48a718d4e048398c102cc680ddd09f"
+preview_id = "4a610546c05a416d85e60aee981bbe49"
+
+[[r2_buckets]]
+binding = "MARKETING_ASSETS"
+bucket_name = "sol402-marketing-assets"
+preview_bucket_name = "sol402-marketing-assets-preview"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# Secrets such as ADMIN_API_KEY should be configured via `wrangler secret put`
+NETWORK = "solana"
+FACILITATOR_URL = "https://facilitator.payai.network"
+MERCHANT_ADDRESS = "Dkin4KKuoCSbMjudt8RpE1YuZ7gqs8aAYVS1fWPiat2W"
+USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+DEFAULT_PRICE_USD = "0.005"
+PRICE_DECIMALS = "6"
+TOKEN_MINT = "HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump"
+TOKEN_HOLDER_THRESHOLD = "2000000"
+HOLDER_DISCOUNT_BPS = "2500"
+FREE_CALLS_PER_WALLET_PER_DAY = "5"
+FREE_CALLS_TOKEN_THRESHOLD = "1000000"
