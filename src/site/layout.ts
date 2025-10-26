@@ -70,6 +70,11 @@ header {
   font-size: 0.95rem;
   color: rgba(245, 245, 245, 0.88);
 }
+.nav-links a.demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
 .nav-links a.primary {
   padding: 0.45rem 0.95rem;
   border-radius: 999px;
@@ -190,9 +195,17 @@ code {
   display: grid;
   gap: 1.5rem;
 }
+.demo-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 820px) {
   .grid-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 900px) {
+  .demo-grid {
+    grid-template-columns: 1.1fr 0.9fr;
   }
 }
 .card {
@@ -201,6 +214,52 @@ code {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(59, 130, 246, 0.18);
   scroll-margin-top: 96px;
+}
+.demo-card {
+  display: grid;
+  gap: 2rem;
+}
+.demo-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+.demo-steps {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  padding-left: 1.25rem;
+}
+.demo-note {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+.demo-controls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.demo-log,
+.demo-result {
+  margin: 0.75rem 0 0;
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  background: rgba(15, 23, 42, 0.75);
+  padding: 1rem;
+  min-height: 120px;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+.demo-result--muted {
+  color: rgba(148, 163, 184, 0.9);
+}
+.demo-faq ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding-left: 1.25rem;
 }
 .paywall-origin {
   display: inline-flex;
@@ -459,6 +518,7 @@ function renderHeader() {
         <a href="/api" data-analytics-click="view_api">API</a>
         <a href="/link" data-analytics-click="view_link">Link</a>
         <a href="/token" data-analytics-click="view_token">Token</a>
+        <a class="demo" href="/demo" data-analytics-click="view_demo_nav">Demo</a>
         <a
           href="https://github.com/sol402proxy-ai/sol402"
           target="_blank"
@@ -488,6 +548,7 @@ function renderFooter() {
       <div class="link-list">
         <a href="/legal/terms">Terms</a>
         <a href="/legal/privacy">Privacy</a>
+        <a href="/demo">Demo</a>
         <a href="mailto:admin@sol402.app">Contact: admin@sol402.app</a>
         <a
           href="https://github.com/sol402proxy-ai/sol402"
