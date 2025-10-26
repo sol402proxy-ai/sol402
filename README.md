@@ -132,7 +132,6 @@ Retrying the same URL with a valid `X-PAYMENT` header settles the charge and str
 - `src/routes/` — admin + paywall endpoints; `routes/site.ts` renders the marketing pages.
 - `src/lib/` — pricing, token perks, security guards, rate limiter, and logging utilities.
 - `public/` — marketing assets (`robots.txt`, `sitemap.xml`, `og.png`).
-- `docs/launch/` — launch collateral (tweets, casts, Product Hunt copy, email template).
 - `tests/` — unit, integration, and end-to-end coverage for payments, security, and proxying.
 
 ## Additional References
