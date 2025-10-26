@@ -20,3 +20,8 @@ wrangler.toml.local
 # Editor directories and files
 .idea/
 .vscode/
+
+# Internal documentation (marketing/planning)
+AGENTS.md
+IMPLEMENTATION_PLAN.md
+CHANGELOG.md
