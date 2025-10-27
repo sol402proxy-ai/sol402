@@ -37,15 +37,32 @@ function createMemoryKV(): MemoryKV {
   };
 }
 
-function createMemoryBucket(files: Record<string, string | Uint8Array>) {
+function createMemoryBucket(files: Record<string, string | Uint8Array | ArrayBuffer>) {
   const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const toArrayBuffer = (value: string | Uint8Array | ArrayBuffer): ArrayBuffer => {
+    if (value instanceof ArrayBuffer) {
+      return value;
+    }
+    if (value instanceof Uint8Array) {
+      return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+    }
+    const encoded = encoder.encode(value);
+    return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+  };
+
+  const toText = (value: string | Uint8Array | ArrayBuffer): string => {
+    if (typeof value === 'string') {
+      return value;
+    }
+    const arrayBuffer = toArrayBuffer(value);
+    return decoder.decode(new Uint8Array(arrayBuffer));
+  };
+
   const storage = new Map(
     Object.entries(files).map(([key, value]) => {
-      if (value instanceof Uint8Array) {
-        return [key, { text: new TextDecoder().decode(value), data: value }];
-      }
-      const data = encoder.encode(value);
-      return [key, { text: value, data }];
+      return [key, { text: toText(value), data: toArrayBuffer(value) }];
     })
   );
 
@@ -60,7 +77,7 @@ function createMemoryBucket(files: Record<string, string | Uint8Array>) {
           return entry.text;
         },
         async arrayBuffer() {
-          return entry.data.buffer.slice(entry.data.byteOffset, entry.data.byteOffset + entry.data.byteLength);
+          return entry.data;
         },
       };
     },
@@ -90,17 +107,73 @@ describe('worker runtime', () => {
     const analyticsKV = createMemoryKV();
     const bucket = createMemoryBucket({
       'robots.txt': 'User-agent: *\nAllow: /',
+      'assets/sol402-demo.js': 'export const demo = true;',
     });
 
     const env = {
       LINKS_KV: linksKV.namespace,
       ANALYTICS_KV: analyticsKV.namespace,
       MARKETING_ASSETS: bucket,
+      SOLANA_RPC_URL: 'https://rpc.example.com',
     } as const;
 
-    const response = await worker.fetch(new Request('https://example.com/robots.txt'), env, ctx);
+    const robotsResponse = await worker.fetch(new Request('https://example.com/robots.txt'), env, ctx);
+    expect(robotsResponse.status).toBe(200);
+    expect(await robotsResponse.text()).toContain('User-agent');
+
+    const assetResponse = await worker.fetch(new Request('https://example.com/assets/sol402-demo.js'), env, ctx);
+    expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get('content-type')).toContain('application/javascript');
+    expect(await assetResponse.text()).toContain('demo');
+  });
+
+  it('proxies demo RPC requests to the configured Solana endpoint', async () => {
+    const linksKV = createMemoryKV();
+    const analyticsKV = createMemoryKV();
+
+    const env = {
+      LINKS_KV: linksKV.namespace,
+      ANALYTICS_KV: analyticsKV.namespace,
+      SOLANA_RPC_URL: 'https://rpc.example.com',
+    } as const;
+
+    const payload = { jsonrpc: '2.0', id: 1, method: 'getSlot' };
+
+    const originalFetch = globalThis.fetch;
+    const rpcMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ jsonrpc: '2.0', result: 123, id: 1 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    globalThis.fetch = vi.fn((input: any, init?: RequestInit) => {
+      if (typeof input === 'string' && input === 'https://rpc.example.com') {
+        return rpcMock(input, init);
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const response = await worker.fetch(
+      new Request('https://example.com/demo/rpc', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }),
+      env,
+      ctx
+    );
+
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain('User-agent');
+    expect(await response.json()).toEqual({ jsonrpc: '2.0', result: 123, id: 1 });
+    expect(rpcMock).toHaveBeenCalledWith('https://rpc.example.com', expect.objectContaining({ method: 'POST' }));
+
+    globalThis.fetch = originalFetch;
   });
 
   it('flushes analytics events to the configured sink during scheduled runs', async () => {

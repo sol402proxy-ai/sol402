@@ -378,110 +378,15 @@ const renderDemo: RenderFn = () =>
           </li>
         </ul>
       </section>
-      <script type="module">
-        const DEMO_URL = 'https://sol402.app/p/a11a560a-d530-4dee-88da-4783862e0d33';
-        const RPC_URL = 'https://solana-mainnet.rpc.extrnode.com/b25026fe-8bd3-4f49-beba-64e75db8deb6';
-        const NETWORK = 'solana';
-
-        const connectButton = document.querySelector('#sol402-demo-connect');
-        const payButton = document.querySelector('#sol402-demo-pay');
-        const logEl = document.querySelector('#sol402-demo-log');
-        const resultEl = document.querySelector('#sol402-demo-result');
-
-        const log = (message) => {
-          const now = new Date().toLocaleTimeString();
-          logEl.textContent = \`[\${now}] \${message}\`;
+      <script>
+        window.sol402DemoConfig = {
+          demoUrl: 'https://sol402.app/p/a11a560a-d530-4dee-88da-4783862e0d33',
+          rpcUrl: '/demo/rpc',
+          fallbackRpcUrl: 'https://solana-mainnet.rpc.extrnode.com/b25026fe-8bd3-4f49-beba-64e75db8deb6',
+          network: 'solana',
         };
-
-        const setResult = (message, muted = false) => {
-          resultEl.textContent = message;
-          resultEl.classList.toggle('demo-result--muted', muted);
-        };
-
-        const ensurePhantom = () => {
-          const provider = window?.solana;
-          if (provider?.isPhantom) {
-            return provider;
-          }
-          throw new Error('Phantom wallet not detected. Install the extension and refresh.');
-        };
-
-        let provider = null;
-        let connected = false;
-
-        connectButton?.addEventListener('click', async () => {
-          try {
-            provider = ensurePhantom();
-            log('Requesting wallet connection…');
-            const { publicKey } = await provider.connect();
-            log(\`Connected \${publicKey.toBase58()}. Ready to pay.\`);
-            connectButton.disabled = true;
-            payButton.disabled = false;
-            connected = true;
-          } catch (error) {
-            console.error(error);
-            log(error?.message || 'Wallet connection failed.');
-          }
-        });
-
-        payButton?.addEventListener('click', async () => {
-          if (!connected) {
-            log('Connect your wallet first.');
-            return;
-          }
-
-          payButton.disabled = true;
-          setResult('Pending…', true);
-          log('Preparing payment. Approve the transaction in Phantom.');
-
-          try {
-            const { createX402Client } = await import(
-              'https://esm.sh/@payai/x402-solana@0.1.0/client?bundle'
-            );
-
-            const walletAdapter = {
-              address: provider.publicKey.toBase58(),
-              publicKey: {
-                toString: () => provider.publicKey.toBase58(),
-              },
-              async signTransaction(transaction) {
-                const signed = await provider.signTransaction(transaction);
-                return signed;
-              },
-            };
-
-            const client = createX402Client({
-              wallet: walletAdapter,
-              network: NETWORK,
-              rpcUrl: RPC_URL,
-              maxPaymentAmount: BigInt(10_000), // 0.01 USDC ceiling
-            });
-
-            const response = await client.fetch(DEMO_URL, {
-              headers: {
-                accept: 'application/json',
-              },
-            });
-
-            const body = await response.text();
-            let displayBody = body;
-            try {
-              const parsed = JSON.parse(body);
-              displayBody = JSON.stringify(parsed, null, 2);
-            } catch {
-              /* non-JSON body */
-            }
-            log(\`Completed with status \${response.status}.\`);
-            setResult(displayBody || '(empty response)', !displayBody);
-          } catch (error) {
-            console.error(error);
-            log(error?.message || 'Payment failed. Check the console for details.');
-            setResult('No response — payment or fetch failed.', true);
-          } finally {
-            payButton.disabled = false;
-          }
-        });
-      </script>`,
+      </script>
+      <script type="module" src="/assets/sol402-demo.js"></script>`,
   });
 
 const renderFaq: RenderFn = () =>

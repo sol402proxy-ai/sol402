@@ -19,10 +19,11 @@ async function loadTextAsset(path: string): Promise<string | undefined> {
   }
 }
 
-async function loadBinaryAsset(path: string): Promise<Uint8Array | undefined> {
+async function loadBinaryAsset(path: string): Promise<ArrayBuffer | undefined> {
   try {
     const data = await readFile(join(publicDir, path));
-    return new Uint8Array(data);
+    const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    return buffer;
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
       return undefined;

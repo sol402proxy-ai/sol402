@@ -2,7 +2,11 @@ import type { MiddlewareHandler } from 'hono';
 import type { AppConfig } from '../config.js';
 import type { HonoAppEnv } from '../app-context.js';
 import type { PaywallLink, PriceQuote } from '../types.js';
-import { PayAiSolanaPayments, type PaymentRequirements } from './payments.js';
+import {
+  PayAiSolanaPayments,
+  type PaymentRequirements,
+  type PaymentVerificationResult,
+} from './payments.js';
 
 export interface PriceResolverArgs {
   link: PaywallLink;
@@ -85,70 +89,95 @@ export function createPaywallMiddleware(
       return c.json(
         {
           error: 'payment_required',
+          ...challenge,
           challenge,
         },
         402
       );
     }
 
-    let verified = false;
+    const normalizedHeader = payments.normalizePaymentHeader(paymentHeader, requirements);
+
+    let verificationResult: PaymentVerificationResult;
     try {
-      verified = await payments.verify(paymentHeader, requirements);
+      verificationResult = await payments.verify(normalizedHeader, requirements, {
+        fallbackHeader: paymentHeader,
+      });
     } catch (error) {
       logger.error(
         'Payment verification failed',
         {
           linkId: link.id,
           requestUrl,
+          requirements,
         },
         error
       );
       return c.json(
         {
           error: 'payment_verification_failed',
+          ...challenge,
           challenge,
         },
         402
       );
     }
 
-    if (!verified) {
+    logger.debug('Payment verification outcome', {
+      linkId: link.id,
+      requestUrl,
+      ok: verificationResult.ok,
+      settleWithPayAi: verificationResult.settleWithPayAi,
+      receiptPreview: verificationResult.receipt?.slice(0, 32),
+    });
+
+    if (!verificationResult.ok || !verificationResult.receipt) {
       logger.warn('Payment invalid', {
         linkId: link.id,
         requestUrl,
+        requirements,
+        paymentHeaderPreview: paymentHeader.slice(0, 32),
       });
       c.header('X-Payment-Required', 'true');
       c.set('paymentRequired', true);
       return c.json(
         {
           error: 'payment_invalid',
+          ...challenge,
           challenge,
         },
         402
       );
     }
 
-    c.set('paymentReceipt', paymentHeader);
+    c.set('paymentReceipt', verificationResult.receipt);
 
     await next();
 
-    try {
-      const settled = await payments.settle(paymentHeader, requirements);
-      if (!settled) {
-        logger.warn('Payment settlement failed', {
-          linkId: link.id,
-          requestUrl,
-        });
+    if (verificationResult.settleWithPayAi && verificationResult.receipt) {
+      try {
+        const settled = await payments.settle(verificationResult.receipt, requirements);
+        if (!settled) {
+          logger.warn('Payment settlement failed', {
+            linkId: link.id,
+            requestUrl,
+          });
+        }
+      } catch (error) {
+        logger.error(
+          'Payment settlement threw',
+          {
+            linkId: link.id,
+            requestUrl,
+          },
+          error
+        );
       }
-    } catch (error) {
-      logger.error(
-        'Payment settlement threw',
-        {
-          linkId: link.id,
-          requestUrl,
-        },
-        error
-      );
+    } else if (!verificationResult.settleWithPayAi) {
+      logger.warn('Payment accepted via local verification; skipping settlement', {
+        linkId: link.id,
+        requestUrl,
+      });
     }
   };
 }

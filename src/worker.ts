@@ -101,13 +101,13 @@ function createAssetProvider(env: WorkerEnv) {
       }
       return object.text();
     },
-    getBinaryAsset: async (path: string): Promise<Uint8Array | undefined> => {
+    getBinaryAsset: async (path: string): Promise<ArrayBuffer | undefined> => {
       const object = await bucket.get(path);
       if (!object) {
         return undefined;
       }
       const arrayBuffer = await object.arrayBuffer();
-      return new Uint8Array(arrayBuffer);
+      return arrayBuffer;
     },
   };
 }

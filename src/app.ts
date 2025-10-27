@@ -21,7 +21,7 @@ import {
 
 export interface AssetProvider {
   getTextAsset(path: string): Promise<string | undefined>;
-  getBinaryAsset(path: string): Promise<Uint8Array | undefined>;
+  getBinaryAsset(path: string): Promise<ArrayBuffer | undefined>;
 }
 
 export interface CreateAppOptions {
@@ -64,7 +64,7 @@ export function createApp(options: CreateAppOptions = {}) {
       metricsPublisher,
       rpcEndpoint: config.solanaRpcUrl,
     });
-  const paymentService = new PayAiSolanaPayments(config);
+  const paymentService = new PayAiSolanaPayments(config, { logger });
 
   const rateLimiter =
     options.rateLimiter ??
@@ -95,6 +95,48 @@ export function createApp(options: CreateAppOptions = {}) {
   );
 
   if (assetProvider) {
+    app.get('/assets/:asset{.+}', async (c) => {
+      const assetParam = c.req.param('asset');
+      const assetPath = `assets/${assetParam}`;
+      const extension = assetParam.split('.').pop()?.toLowerCase();
+      const textTypes: Record<string, string> = {
+        js: 'application/javascript; charset=utf-8',
+        css: 'text/css; charset=utf-8',
+        json: 'application/json; charset=utf-8',
+        txt: 'text/plain; charset=utf-8',
+      };
+      const contentType = (extension && textTypes[extension]) || undefined;
+      if (contentType) {
+        const body = await assetProvider.getTextAsset(assetPath);
+        if (!body) {
+          return c.notFound();
+        }
+        return c.text(body, 200, {
+          'content-type': contentType,
+        });
+      }
+
+      const binary = await assetProvider.getBinaryAsset(assetPath);
+      if (!binary) {
+        return c.notFound();
+      }
+      let binaryContentType = 'application/octet-stream';
+      if (extension === 'png') {
+        binaryContentType = 'image/png';
+      } else if (extension === 'jpg' || extension === 'jpeg') {
+        binaryContentType = 'image/jpeg';
+      } else if (extension === 'svg') {
+        binaryContentType = 'image/svg+xml';
+      }
+      const blob = new Blob([binary], { type: binaryContentType });
+      return new Response(blob, {
+        status: 200,
+        headers: {
+          'content-type': binaryContentType,
+        },
+      });
+    });
+
     app.get('/robots.txt', async (c) => {
       const body = await assetProvider.getTextAsset('robots.txt');
       if (!body) {
@@ -120,7 +162,8 @@ export function createApp(options: CreateAppOptions = {}) {
       if (!body) {
         return c.notFound();
       }
-      return new Response(body, {
+      const blob = new Blob([body], { type: 'image/png' });
+      return new Response(blob, {
         status: 200,
         headers: {
           'content-type': 'image/png',
@@ -128,6 +171,70 @@ export function createApp(options: CreateAppOptions = {}) {
       });
     });
   }
+
+  app.post('/demo/rpc', async (c) => {
+    const config = c.get('config');
+    const logger = c.get('logger');
+
+    if (!config.solanaRpcUrl) {
+      return c.json(
+        {
+          error: 'rpc_unconfigured',
+          message: 'Solana RPC endpoint is not configured.',
+        },
+        503
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await c.req.json();
+    } catch {
+      return c.json(
+        {
+          error: 'invalid_json',
+          message: 'RPC payload must be valid JSON.',
+        },
+        400
+      );
+    }
+
+    try {
+      const upstream = await fetch(config.solanaRpcUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await upstream.text();
+      const contentType = upstream.headers.get('content-type') ?? 'application/json';
+      return new Response(responseText, {
+        status: upstream.status,
+        headers: {
+          'content-type': contentType,
+          'cache-control': 'no-store',
+        },
+      });
+    } catch (error) {
+      logger.error(
+        'Demo RPC proxy request failed',
+        {
+          rpcUrl: config.solanaRpcUrl,
+        },
+        error
+      );
+      return c.json(
+        {
+          error: 'rpc_proxy_failure',
+          message: 'Unable to reach the Solana RPC endpoint.',
+        },
+        502
+      );
+    }
+  });
 
   // Load link context for paywalled routes.
   app.use('/p/:id', async (c, next) => {
