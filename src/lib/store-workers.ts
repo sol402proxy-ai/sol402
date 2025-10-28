@@ -308,7 +308,7 @@ export class WorkersKVLinkStore implements LinkStore {
   }
 
   async getLink(id: string): Promise<PaywallLink | undefined> {
-    const raw = await this.kv.get(this.key(id), { cacheTtl: 0 });
+    const raw = await this.kv.get(this.key(id));
     if (!raw) {
       return undefined;
     }
@@ -329,7 +329,7 @@ export class WorkersKVLinkStore implements LinkStore {
     });
     const links: PaywallLink[] = [];
     for (const key of response.keys) {
-      const raw = await this.kv.get(key.name, { cacheTtl: 0 });
+      const raw = await this.kv.get(key.name);
       if (!raw) {
         continue;
       }
@@ -349,7 +349,7 @@ export class WorkersKVLinkStore implements LinkStore {
   private async ensureIndexPropagation(indexKey: string, expectedValue: string): Promise<void> {
     const maxAttempts = 5;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const current = await this.kv.get(indexKey, { cacheTtl: 0 });
+      const current = await this.kv.get(indexKey);
       if (current === expectedValue) {
         return;
       }
@@ -363,7 +363,7 @@ export class WorkersKVLinkStore implements LinkStore {
 
   async findLinkByApiKeyHash(hash: string): Promise<PaywallLink | undefined> {
     const directKey = this.apiIndexKey(hash);
-    const directId = await this.kv.get(directKey, { cacheTtl: 0 });
+    const directId = await this.kv.get(directKey);
     if (directId) {
       const link = await this.getLink(directId);
       if (link && link.apiKeyHash === hash) {
@@ -375,7 +375,7 @@ export class WorkersKVLinkStore implements LinkStore {
       prefix: this.prefix,
     });
     for (const entry of response.keys) {
-      const raw = await this.kv.get(entry.name, { cacheTtl: 0 });
+      const raw = await this.kv.get(entry.name);
       if (!raw) {
         continue;
       }
