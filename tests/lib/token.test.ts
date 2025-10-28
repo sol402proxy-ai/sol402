@@ -19,6 +19,10 @@ const baseConfig: AppConfig = {
   solanaRpcUrl: undefined,
   rpcMetricsUrl: undefined,
   rpcMetricsAuthHeader: undefined,
+  analyticsSinkUrl: undefined,
+  analyticsSinkAuthHeader: undefined,
+  analyticsSinkDatabase: undefined,
+  analyticsSinkTable: undefined,
 };
 
 class TestTokenPerksService extends TokenPerksService {

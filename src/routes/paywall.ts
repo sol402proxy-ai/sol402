@@ -13,6 +13,7 @@ paywall.get('/:id', async (c) => {
   const link = c.get('link');
   const logger = c.get('logger');
   const priceQuote = c.get('priceQuote');
+  const analyticsStore = c.get('analyticsStore');
 
   if (!link) {
     return c.json(
@@ -58,6 +59,8 @@ paywall.get('/:id', async (c) => {
   try {
     const start = Date.now();
     const upstream = await proxyFetch(link.origin);
+    const now = new Date();
+    const requestPath = new URL(c.req.url).pathname;
 
     const headers = filterResponseHeaders(upstream.headers);
     const response = new Response(upstream.body, {
@@ -79,7 +82,7 @@ paywall.get('/:id', async (c) => {
           paidCallsDelta: isFree ? 0 : 1,
           freeCallsDelta: isFree ? 1 : 0,
           revenueUsdDelta: isFree ? 0 : priceQuote.priceUsd,
-          lastPaymentAt: new Date(),
+          lastPaymentAt: now,
         });
       } catch (usageError) {
         logger.error(
@@ -90,6 +93,52 @@ paywall.get('/:id', async (c) => {
           },
           usageError
         );
+      }
+
+      if (analyticsStore) {
+        try {
+          const referrerHeader = c.req.header('referer') ?? undefined;
+          let referrerHost: string | undefined;
+          if (referrerHeader) {
+            try {
+              const parsedReferrer = new URL(referrerHeader);
+              referrerHost = parsedReferrer.host || parsedReferrer.hostname;
+            } catch {
+              referrerHost = undefined;
+            }
+          }
+          await analyticsStore.record({
+            name: isFree ? 'link_free_call' : 'link_paid_call',
+            path: requestPath,
+            props: {
+              linkId: link.id,
+              merchantAddress: link.merchantAddress ?? null,
+              tierId: link.tier ?? null,
+              tierLabel: link.tierLabel ?? null,
+              reason: priceQuote.reason,
+              priceUsd: priceQuote.priceUsd,
+              discountApplied: priceQuote.discountApplied,
+              freeQuotaUsed: priceQuote.freeQuotaUsed,
+              origin: link.origin,
+              requestId: link.requestId ?? null,
+              referrer: referrerHeader ?? null,
+              referrerHost: referrerHost ?? null,
+              responseStatus: upstream.status,
+            },
+            userAgent: c.req.header('user-agent') ?? undefined,
+            ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? undefined,
+            referrer: referrerHeader,
+            occurredAt: now,
+          });
+        } catch (analyticsError) {
+          logger.warn(
+            'Failed to record analytics event',
+            {
+              linkId: link.id,
+            },
+            analyticsError
+          );
+        }
       }
     }
 

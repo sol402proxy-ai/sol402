@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfig } from '../src/config.js';
+import type { AnalyticsStore, AnalyticsEventRecord } from '../src/lib/analytics-store.js';
 import { createLinkStore, type LinkStore } from '../src/lib/store.js';
 import {
   createEncodedPaymentHeader,
@@ -25,16 +26,22 @@ const baseConfig: AppConfig = {
   solanaRpcUrl: undefined,
   rpcMetricsUrl: undefined,
   rpcMetricsAuthHeader: undefined,
+  analyticsSinkUrl: undefined,
+  analyticsSinkAuthHeader: undefined,
+  analyticsSinkDatabase: undefined,
+  analyticsSinkTable: undefined,
 };
 
 async function bootstrapApp(
   configOverride?: Partial<AppConfig>,
-  storeOverride?: LinkStore
+  storeOverride?: LinkStore,
+  analyticsOverride?: AnalyticsStore
 ) {
   const module = await import('../src/server.js');
   return module.createApp({
     config: { ...baseConfig, ...configOverride },
     store: storeOverride,
+    analyticsStore: analyticsOverride,
   });
 }
 
@@ -154,6 +161,53 @@ describe('paywall route', () => {
 
     const body = await response.json();
     expect(body).toEqual({ hello: 'world' });
+  });
+
+  it('records analytics event after a paid request is proxied', async () => {
+    const analyticsRecord = vi.fn(
+      async (
+        event: Parameters<AnalyticsStore['record']>[0]
+      ): Promise<AnalyticsEventRecord> => ({
+        ...event,
+        id: 'evt-1',
+        receivedAt: new Date(),
+      })
+    );
+    const analyticsStore: AnalyticsStore = {
+      record: analyticsRecord,
+    };
+
+    const app = await bootstrapApp(undefined, undefined, analyticsStore);
+    const linkId = await createLink(app);
+
+    const fetchMock = vi.fn(
+      createFacilitatorFetchHandler({
+        originResponse: () =>
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          }),
+      })
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.stubGlobal('fetch', fetchMock as any);
+
+    const paymentHeader = createEncodedPaymentHeader();
+
+    const response = await app.request(`http://localhost/p/${linkId}`, {
+      headers: {
+        'x-payment': paymentHeader,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(analyticsRecord).toHaveBeenCalledTimes(1);
+    const payload = analyticsRecord.mock.calls[0]?.[0];
+    expect(payload?.name).toBe('link_paid_call');
+    expect(payload?.props?.linkId).toBe(linkId);
   });
 
   it('allows free quota bypass when payer qualifies', async () => {

@@ -1,7 +1,8 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AnalyticsMetricsService, WalletMetrics } from '../src/lib/analytics-metrics.js';
 
-async function createTestApp() {
+async function createTestApp(analyticsMetrics?: AnalyticsMetricsService) {
   const [{ createApp }, { createLinkStore }, { generateApiKey }] = await Promise.all([
     import('../src/app.js'),
     import('../src/lib/store.js'),
@@ -31,8 +32,8 @@ async function createTestApp() {
     lastPaymentAt: new Date('2024-01-01T00:00:00Z'),
   });
 
-  const app = createApp({ store });
-  return { app, apiKey, wallet };
+  const app = createApp({ store, analyticsMetrics });
+  return { app, apiKey, wallet, linkId: link.id };
 }
 
 describe('dashboard routes', () => {
@@ -76,6 +77,75 @@ describe('dashboard routes', () => {
     const payload = await response.json();
     expect(Array.isArray(payload.links)).toBe(true);
     expect(payload.links).toHaveLength(1);
+  });
+
+  it('returns analytics metrics snapshot for the dashboard', async () => {
+    let linkIdRef = '';
+    const generatedAt = new Date().toISOString();
+    const analyticsStub = {
+      getWalletMetrics: vi.fn(async (): Promise<WalletMetrics> => ({
+        summary: {
+          paidCallsTotal: 12,
+          paidCalls24h: 5,
+          paidCallsToday: 3,
+          freeCallsTotal: 4,
+          freeCalls24h: 2,
+          freeCallsToday: 1,
+          revenueUsdTotal: 0.48,
+          revenueUsd24h: 0.2,
+          revenueUsdToday: 0.12,
+          lastPaymentAt: '2025-10-28T11:59:00.000Z',
+        },
+        timeseries: [
+          { date: '2025-10-27', paidCalls: 2, freeCalls: 1, revenueUsd: 0.08 },
+          { date: '2025-10-28', paidCalls: 3, freeCalls: 1, revenueUsd: 0.12 },
+        ],
+        linkStats: linkIdRef
+          ? {
+              [linkIdRef]: {
+                paidCallsTotal: 10,
+                paidCalls24h: 4,
+                freeCallsTotal: 2,
+                freeCalls24h: 1,
+                revenueUsdTotal: 0.4,
+                revenueUsd24h: 0.16,
+                lastPaymentAt: '2025-10-28T11:59:00.000Z',
+              },
+            }
+          : {},
+        topReferrers: [{ host: 'sol402.app', paidCalls24h: 3 }],
+        recentActivity: [
+          {
+            occurredAt: '2025-10-28T11:59:00.000Z',
+            linkId: linkIdRef,
+            type: 'paid',
+            priceUsd: 0.04,
+            reason: 'base-price',
+            referrerHost: 'sol402.app',
+            discountApplied: false,
+            freeQuotaUsed: false,
+          },
+        ],
+        generatedAt,
+      })),
+    } as unknown as AnalyticsMetricsService;
+
+    const { app, apiKey, linkId } = await createTestApp(analyticsStub);
+    linkIdRef = linkId;
+
+    const response = await app.request('http://localhost/dashboard/metrics', {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.summary.paidCallsTotal).toBe(12);
+    expect(payload.summary.freeCallsRemaining).toBeGreaterThanOrEqual(0);
+    expect(payload.links[0].stats.paidCalls24h).toBe(4);
+    expect(payload.recentActivity).toHaveLength(1);
+    expect(analyticsStub.getWalletMetrics).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown API keys', async () => {

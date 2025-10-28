@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { HonoAppEnv } from '../app-context.js';
 import { hashApiKey, verifyApiKey } from '../lib/keys.js';
 import type { LinkTierId, PaywallLink } from '../types.js';
+import type { LinkMetrics } from '../lib/analytics-metrics.js';
 
 const sessionSchema = z.object({
   apiKey: z.string().trim().min(12, 'API key is required.'),
@@ -260,6 +261,128 @@ dashboard.get('/dashboard/links', async (c) => {
     },
     200
   );
+});
+
+dashboard.get('/dashboard/metrics', async (c) => {
+  const authHeader = c.req.header('authorization') ?? c.req.header('x-api-key');
+  if (!authHeader) {
+    return c.json(
+      {
+        error: 'missing_credentials',
+        message: 'Provide your API key via Authorization: Bearer <key>.',
+      },
+      401
+    );
+  }
+
+  let apiKey = authHeader;
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    apiKey = authHeader.slice(7).trim();
+  }
+
+  const metricsService = c.get('analyticsMetrics');
+  if (!metricsService) {
+    return c.json(
+      {
+        error: 'analytics_unavailable',
+        message: 'Analytics sink is not configured for this deployment.',
+      },
+      503
+    );
+  }
+
+  const result = await resolveScopedLinks(apiKey, c);
+  if (result.status !== 200) {
+    return c.json(result.body, result.status);
+  }
+
+  const { merchantAddress, links } = result.body;
+  const logger = c.get('logger');
+  const config = c.get('config');
+
+  try {
+    const metrics = await metricsService.getWalletMetrics(merchantAddress);
+    const freeCallsDailyLimit = config.freeCallsPerWalletPerDay;
+    const freeCallsRemaining = Math.max(
+      freeCallsDailyLimit - metrics.summary.freeCallsToday,
+      0
+    );
+
+    const zeroStats: LinkMetrics = {
+      paidCallsTotal: 0,
+      paidCalls24h: 0,
+      freeCallsTotal: 0,
+      freeCalls24h: 0,
+      revenueUsdTotal: 0,
+      revenueUsd24h: 0,
+      lastPaymentAt: null,
+    };
+
+    const enrichedLinks = links.map((link) => {
+      const stats = metrics.linkStats[link.id]
+        ?? {
+          ...zeroStats,
+        };
+      const usage = link.usage;
+      let lastPaymentIso: string | null = null;
+      if (usage?.lastPaymentAt) {
+        if (usage.lastPaymentAt instanceof Date) {
+          lastPaymentIso = usage.lastPaymentAt.toISOString();
+        } else {
+          const parsed = new Date(usage.lastPaymentAt);
+          lastPaymentIso = Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+        }
+      }
+      return {
+        id: link.id,
+        origin: link.origin,
+        priceUsd: link.priceUsd ?? null,
+        tier: link.tier ?? null,
+        tierLabel: link.tierLabel ?? null,
+        apiKeyPreview: link.apiKeyPreview ?? null,
+        stats,
+        usage: usage
+          ? {
+              totalPaidCalls: usage.totalPaidCalls ?? 0,
+              totalFreeCalls: usage.totalFreeCalls ?? 0,
+              totalRevenueUsd: Number((usage.totalRevenueUsd ?? 0).toFixed(6)),
+              lastPaymentAt: lastPaymentIso,
+            }
+          : null,
+      };
+    });
+
+    return c.json(
+      {
+        generatedAt: metrics.generatedAt,
+        summary: {
+          ...metrics.summary,
+          freeCallsDailyLimit,
+          freeCallsRemaining,
+        },
+        timeseries: metrics.timeseries,
+        topReferrers: metrics.topReferrers,
+        recentActivity: metrics.recentActivity,
+        links: enrichedLinks,
+      },
+      200
+    );
+  } catch (error) {
+    logger.error(
+      'Failed to load analytics metrics',
+      {
+        merchantAddress,
+      },
+      error
+    );
+    return c.json(
+      {
+        error: 'analytics_error',
+        message: 'Unable to load analytics metrics right now.',
+      },
+      502
+    );
+  }
 });
 
 export default dashboard;

@@ -17,6 +17,10 @@ export interface AppConfig {
   solanaRpcUrl?: string;
   rpcMetricsUrl?: string;
   rpcMetricsAuthHeader?: string;
+  analyticsSinkUrl?: string;
+  analyticsSinkAuthHeader?: string;
+  analyticsSinkDatabase?: string;
+  analyticsSinkTable?: string;
 }
 
 export function loadConfig(): AppConfig {
@@ -37,5 +41,9 @@ export function loadConfig(): AppConfig {
     solanaRpcUrl: env.SOLANA_RPC_URL,
     rpcMetricsUrl: env.RPC_METRICS_URL,
     rpcMetricsAuthHeader: env.RPC_METRICS_AUTH_HEADER,
+    analyticsSinkUrl: env.ANALYTICS_SINK_URL,
+    analyticsSinkAuthHeader: env.ANALYTICS_SINK_AUTH_HEADER,
+    analyticsSinkDatabase: env.ANALYTICS_SINK_DATABASE,
+    analyticsSinkTable: env.ANALYTICS_SINK_TABLE,
   };
 }

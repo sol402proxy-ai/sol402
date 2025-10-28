@@ -39,6 +39,10 @@ const config: AppConfig = {
   solanaRpcUrl: 'https://rpc.example.com',
   rpcMetricsUrl: undefined,
   rpcMetricsAuthHeader: undefined,
+  analyticsSinkUrl: undefined,
+  analyticsSinkAuthHeader: undefined,
+  analyticsSinkDatabase: undefined,
+  analyticsSinkTable: undefined,
 };
 
 const logger: Logger = {

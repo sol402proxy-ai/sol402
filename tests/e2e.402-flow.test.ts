@@ -23,6 +23,10 @@ const testConfig: AppConfig = {
   solanaRpcUrl: undefined,
   rpcMetricsUrl: undefined,
   rpcMetricsAuthHeader: undefined,
+  analyticsSinkUrl: undefined,
+  analyticsSinkAuthHeader: undefined,
+  analyticsSinkDatabase: undefined,
+  analyticsSinkTable: undefined,
 };
 
 describe('e2e 402 flow', () => {

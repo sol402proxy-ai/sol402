@@ -9,6 +9,7 @@ import { type Logger, createLogger } from './lib/logger.js';
 import { TokenPerksService } from './lib/token.js';
 import { createPaywallMiddleware } from './lib/x402.js';
 import { PayAiSolanaPayments } from './lib/payments.js';
+import { AnalyticsMetricsService } from './lib/analytics-metrics.js';
 import adminRoutes from './routes/admin.js';
 import paywallRoutes from './routes/paywall.js';
 import siteRoutes from './routes/site.js';
@@ -36,6 +37,7 @@ export interface CreateAppOptions {
   assetProvider?: AssetProvider;
   analyticsStore?: AnalyticsStore;
   metricsPublisher?: MetricsPublisher;
+  analyticsMetrics?: AnalyticsMetricsService;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -53,6 +55,22 @@ export function createApp(options: CreateAppOptions = {}) {
           logger,
           serviceLabel: 'sol402-proxy',
         })
+      : undefined);
+  const analyticsMetrics =
+    options.analyticsMetrics
+    ?? (config.analyticsSinkUrl && config.analyticsSinkTable
+      ? new AnalyticsMetricsService(
+        {
+          url: config.analyticsSinkUrl,
+          authHeader: config.analyticsSinkAuthHeader,
+          database: config.analyticsSinkDatabase,
+          table: config.analyticsSinkTable,
+        },
+        {
+          fetchFn: fetch,
+          logger,
+        }
+      )
       : undefined);
 
   const connection = options.connection
@@ -87,6 +105,9 @@ export function createApp(options: CreateAppOptions = {}) {
     c.set('tokenService', tokenService);
     c.set('rateLimiter', rateLimiter);
     c.set('analyticsStore', analyticsStore);
+    if (analyticsMetrics) {
+      c.set('analyticsMetrics', analyticsMetrics);
+    }
     await next();
   });
 

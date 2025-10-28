@@ -6,6 +6,7 @@ import type { LinkStore } from './lib/store.js';
 import type { AnalyticsStore } from './lib/analytics-store.js';
 import type { PaymentRequirements } from './lib/payments.js';
 import type { PaywallLink, PaymentChallenge, PriceQuote } from './types.js';
+import type { AnalyticsMetricsService } from './lib/analytics-metrics.js';
 
 export interface AppVariables {
   store: LinkStore;
@@ -14,6 +15,7 @@ export interface AppVariables {
   rateLimiter: TokenBucketRateLimiter;
   tokenService: TokenPerksService;
   analyticsStore: AnalyticsStore;
+  analyticsMetrics?: AnalyticsMetricsService;
   link?: PaywallLink;
   priceQuote?: PriceQuote;
   paymentReceipt?: string;
