@@ -10,6 +10,7 @@
 - **KV Link Store** – authoritative store for link metadata (price, tier caps, previews). Used to hydrate dashboard cards.
 - **Solana RPC (Extrnode/Helius)** – fetch live SPL balance for the merchant wallet to display token perks in the dashboard.
 - **Webhook delivery logs** – not live yet; placeholder section will read from KV once webhooks are implemented.
+- **New server-side analytics events (required)** – emit paywall settlement events when `recordLinkUsage` succeeds so we capture `linkId`, `merchantAddress`, `amountUsd`, `isFree`, and `referrer` in ClickHouse.
 
 ## Metrics & Aggregations
 - **Paid calls**: total and last 24h counts per link and per wallet.
@@ -44,6 +45,11 @@
    - Unit tests for ClickHouse query builder and cache behaviour (mock fetch).
    - Integration tests using pre-baked ClickHouse responses to confirm JSON shape.
    - Rate limit & cache expiry tests.
+- **Instrumentation**
+   - Hook into `store.recordLinkUsage` (or immediately after successful proxy response) to enqueue analytics events:
+     - `link_paid_call` (props: `linkId`, `merchantAddress`, `priceUsd`, `requestId`, `referrer`, `walletTier`, `discountApplied`)
+     - `link_free_call` (props: `linkId`, `merchantAddress`, `reason`, `walletTier`)
+   - Ensure events include `occurredAt` and `path`/`name` values compatible with ClickHouse schema.
 
 ## Frontend Work
 - **Fetch layer**
@@ -75,4 +81,3 @@
 3. Add charts/top referrers/recent activity once data is confirmed.
 4. Integrate token balance + webhook status modules.
 5. Update docs/tests and deploy.
-
