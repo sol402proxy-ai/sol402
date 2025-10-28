@@ -70,6 +70,29 @@ paywall.get('/:id', async (c) => {
       response.headers.set('X-PAYMENT-RESPONSE', receipt);
     }
 
+    if (priceQuote) {
+      const store = c.get('store');
+      const isFree =
+        Boolean(priceQuote.freeQuotaUsed) || !priceQuote.priceUsd || priceQuote.priceUsd <= 0;
+      try {
+        await store.recordLinkUsage(link.id, {
+          paidCallsDelta: isFree ? 0 : 1,
+          freeCallsDelta: isFree ? 1 : 0,
+          revenueUsdDelta: isFree ? 0 : priceQuote.priceUsd,
+          lastPaymentAt: new Date(),
+        });
+      } catch (usageError) {
+        logger.error(
+          'Failed to record link usage',
+          {
+            linkId: link.id,
+            reason: priceQuote.reason,
+          },
+          usageError
+        );
+      }
+    }
+
     logger.info('Proxied origin response', {
       linkId: link.id,
       origin: link.origin,

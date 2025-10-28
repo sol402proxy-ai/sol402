@@ -23,6 +23,7 @@ const X402_VERSION = 1;
 export interface PaymentRequirementContext {
   requestUrl: string;
   quote: PriceQuote;
+  merchantAddress?: string;
 }
 
 export interface PayAiSolanaPaymentsOptions {
@@ -36,7 +37,7 @@ export interface PaymentVerificationResult {
 }
 
 export class PayAiSolanaPayments {
-  private readonly handler: X402PaymentHandler;
+  private readonly handlerCache = new Map<string, X402PaymentHandler>();
   private readonly config: AppConfig;
   private readonly logger?: Logger;
 
@@ -47,12 +48,13 @@ export class PayAiSolanaPayments {
 
     this.config = config;
     this.logger = options.logger;
-    this.handler = new X402PaymentHandler({
+    const defaultHandler = new X402PaymentHandler({
       network: config.network,
       treasuryAddress: config.merchantAddress,
       facilitatorUrl: config.facilitatorUrl,
       rpcUrl: config.solanaRpcUrl,
     });
+    this.handlerCache.set(config.merchantAddress, defaultHandler);
   }
 
   normalizePaymentHeader(header: string, _requirements?: PaymentRequirements): string {
@@ -99,6 +101,7 @@ export class PayAiSolanaPayments {
   }
 
   async createRequirements(context: PaymentRequirementContext): Promise<PaymentRequirements> {
+    const handler = this.getHandler(context.merchantAddress);
     const route = {
       network: this.config.network,
       price: {
@@ -115,7 +118,7 @@ export class PayAiSolanaPayments {
       },
     } as const;
 
-    const requirements = await this.handler.createPaymentRequirements(
+    const requirements = await handler.createPaymentRequirements(
       route as unknown as RouteConfig,
       context.requestUrl
     );
@@ -150,9 +153,10 @@ export class PayAiSolanaPayments {
   async verify(
     header: string,
     requirements: PaymentRequirements,
-    options: { fallbackHeader?: string } = {}
+    options: { fallbackHeader?: string; merchantAddress?: string } = {}
   ): Promise<PaymentVerificationResult> {
-    const verified = await this.handler.verifyPayment(header, requirements);
+    const handler = this.getHandler(options.merchantAddress);
+    const verified = await handler.verifyPayment(header, requirements);
     if (verified) {
       return {
         ok: true,
@@ -178,8 +182,32 @@ export class PayAiSolanaPayments {
     };
   }
 
-  async settle(header: string, requirements: PaymentRequirements): Promise<boolean> {
-    return this.handler.settlePayment(header, requirements);
+  async settle(
+    header: string,
+    requirements: PaymentRequirements,
+    merchantAddress?: string
+  ): Promise<boolean> {
+    const handler = this.getHandler(merchantAddress);
+    return handler.settlePayment(header, requirements);
+  }
+
+  private getHandler(merchantAddress?: string): X402PaymentHandler {
+    const treasury = merchantAddress ?? this.config.merchantAddress;
+    if (!treasury) {
+      throw new Error('Treasury address is not configured');
+    }
+    const cached = this.handlerCache.get(treasury);
+    if (cached) {
+      return cached;
+    }
+    const handler = new X402PaymentHandler({
+      network: this.config.network,
+      treasuryAddress: treasury,
+      facilitatorUrl: this.config.facilitatorUrl,
+      rpcUrl: this.config.solanaRpcUrl,
+    });
+    this.handlerCache.set(treasury, handler);
+    return handler;
   }
 }
 

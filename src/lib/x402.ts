@@ -41,6 +41,7 @@ export function createPaywallMiddleware(
     }
 
     const payer = c.req.header('x-payer') ?? undefined;
+    const merchantAddress = link.merchantAddress ?? config.merchantAddress;
     const quote = await resolvePrice({ link, payer, config });
 
     c.set('priceQuote', quote);
@@ -59,6 +60,7 @@ export function createPaywallMiddleware(
       requirements = await payments.createRequirements({
         requestUrl,
         quote,
+        merchantAddress,
       });
     } catch (error) {
       logger.error(
@@ -102,6 +104,7 @@ export function createPaywallMiddleware(
     try {
       verificationResult = await payments.verify(normalizedHeader, requirements, {
         fallbackHeader: paymentHeader,
+        merchantAddress,
       });
     } catch (error) {
       logger.error(
@@ -156,7 +159,11 @@ export function createPaywallMiddleware(
 
     if (verificationResult.settleWithPayAi && verificationResult.receipt) {
       try {
-        const settled = await payments.settle(verificationResult.receipt, requirements);
+        const settled = await payments.settle(
+          verificationResult.receipt,
+          requirements,
+          merchantAddress
+        );
         if (!settled) {
           logger.warn('Payment settlement failed', {
             linkId: link.id,

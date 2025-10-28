@@ -63,6 +63,22 @@ export class TokenPerksService {
     this.rpcEndpoint = options.rpcEndpoint ?? config.solanaRpcUrl;
   }
 
+  supportsBalanceChecks(): boolean {
+    return Boolean(this.connection && this.config.tokenMint);
+  }
+
+  async getHolderBalance(owner: string, options: { fresh?: boolean } = {}): Promise<bigint> {
+    if (!this.supportsBalanceChecks()) {
+      throw new Error('Token balance checks require a configured Solana connection and mint.');
+    }
+
+    if (options.fresh) {
+      this.balanceCache.delete(owner);
+    }
+
+    return this.getCachedBalance(owner);
+  }
+
   async adjustPrice(args: PriceAdjustmentArgs): Promise<PriceAdjustmentResult> {
     const { basePriceAtomic, payer, now = new Date() } = args;
     let holderBalance: bigint | undefined;

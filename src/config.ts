@@ -10,6 +10,7 @@ export interface AppConfig {
   usdcMint: string;
   tokenMint: string;
   tokenHolderThreshold: bigint;
+  premiumTokenThreshold: bigint;
   holderDiscountBps: number;
   freeCallsPerWalletPerDay: number;
   freeCallTokenThreshold: bigint;
@@ -29,6 +30,7 @@ export function loadConfig(): AppConfig {
     usdcMint: env.USDC_MINT,
     tokenMint: env.TOKEN_MINT,
     tokenHolderThreshold: BigInt(env.TOKEN_HOLDER_THRESHOLD),
+    premiumTokenThreshold: BigInt(env.PREMIUM_TOKEN_THRESHOLD),
     holderDiscountBps: env.HOLDER_DISCOUNT_BPS,
     freeCallsPerWalletPerDay: env.FREE_CALLS_PER_WALLET_PER_DAY,
     freeCallTokenThreshold: BigInt(env.FREE_CALLS_TOKEN_THRESHOLD),

@@ -50,16 +50,102 @@ describe('WorkersKVLinkStore', () => {
     const created = await store.createLink({
       origin: 'https://example.com/kv',
       priceUsd: 0.02,
+      merchantAddress: 'Merchant1111111111111111111111111111111',
+      contactEmail: 'owner@example.com',
+      requester: 'Example Owner',
+      notes: 'Sample notes',
+      tier: 'growth',
+      tierLabel: 'Growth',
+      apiKeyHash: 'hash-123',
+      apiKeyPreview: 'SOL402-1234',
+      dailyRequestCap: 500,
+      maxActiveLinks: 10,
     });
 
     expect(created.id).toBe('kv-test');
     expect(created.origin).toBe('https://example.com/kv');
+    expect(created.merchantAddress).toBe('Merchant1111111111111111111111111111111');
+    expect(created.contactEmail).toBe('owner@example.com');
+    expect(created.requester).toBe('Example Owner');
+    expect(created.notes).toBe('Sample notes');
+    expect(created.tier).toBe('growth');
+    expect(created.apiKeyPreview).toBe('SOL402-1234');
+    expect(created.usage?.totalPaidCalls).toBe(0);
 
     const fetched = await store.getLink('kv-test');
     expect(fetched?.origin).toBe('https://example.com/kv');
     expect(fetched?.priceUsd).toBe(0.02);
+    expect(fetched?.merchantAddress).toBe('Merchant1111111111111111111111111111111');
+    expect(fetched?.contactEmail).toBe('owner@example.com');
+    expect(fetched?.requester).toBe('Example Owner');
+    expect(fetched?.tierLabel).toBe('Growth');
+
+    const located = await store.findLinkByApiKeyHash('hash-123');
+    expect(located?.id).toBe('kv-test');
+
+    await store.recordLinkUsage('kv-test', {
+      paidCallsDelta: 3,
+      freeCallsDelta: 1,
+      revenueUsdDelta: 0.06,
+    });
+
+    const withUsage = await store.getLink('kv-test');
+    expect(withUsage?.usage?.totalPaidCalls).toBe(3);
+    expect(withUsage?.usage?.totalFreeCalls).toBe(1);
+    expect(withUsage?.usage?.totalRevenueUsd).toBeCloseTo(0.06);
+
+    const count = await store.countLinksByMerchant('Merchant1111111111111111111111111111111');
+    expect(count).toBe(1);
 
     await store.deleteLink('kv-test');
     expect(await store.getLink('kv-test')).toBeUndefined();
+  });
+
+  it('manages link requests lifecycle', async () => {
+    const kv = createMockKV();
+    const store = createWorkersKVLinkStore(kv, {
+      createId: () => Math.random().toString(36).slice(2),
+    });
+
+    const request = await store.createLinkRequest({
+      origin: 'https://example.com/report',
+      priceUsd: 0.5,
+      merchantAddress: 'Merchant1111111111111111111111111111111',
+      contactEmail: 'admin@example.com',
+      requestedBy: 'Example Owner',
+      notes: 'Please approve quickly',
+      tier: 'baseline',
+      tierLabel: 'Baseline',
+      apiKeyHash: 'hash',
+      apiKeyPreview: 'SOL402-ABCD',
+      dailyRequestCap: 200,
+      maxActiveLinks: 3,
+    });
+
+    expect(request.status).toBe('pending');
+
+    const fetched = await store.getLinkRequest(request.id);
+    expect(fetched?.origin).toBe('https://example.com/report');
+    expect(fetched?.contactEmail).toBe('admin@example.com');
+
+    const listed = await store.listLinkRequests();
+    expect(listed).toHaveLength(1);
+    expect(listed[0].id).toBe(request.id);
+
+    const updated = await store.updateLinkRequest(request.id, {
+      status: 'approved',
+      linkId: 'link-123',
+      adminNotes: 'Looks good',
+      tier: 'premium',
+      tierLabel: 'Premium',
+    });
+
+    expect(updated?.status).toBe('approved');
+    expect(updated?.linkId).toBe('link-123');
+    expect(updated?.adminNotes).toBe('Looks good');
+    expect(updated?.tier).toBe('premium');
+
+    const approved = await store.listLinkRequests({ status: 'approved' });
+    expect(approved).toHaveLength(1);
   });
 });

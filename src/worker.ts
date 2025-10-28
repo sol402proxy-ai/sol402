@@ -35,6 +35,7 @@ interface WorkerEnv {
   PRICE_DECIMALS?: string;
   TOKEN_MINT?: string;
   TOKEN_HOLDER_THRESHOLD?: string;
+  PREMIUM_TOKEN_THRESHOLD?: string;
   HOLDER_DISCOUNT_BPS?: string;
   FREE_CALLS_PER_WALLET_PER_DAY?: string;
   FREE_CALLS_TOKEN_THRESHOLD?: string;
@@ -61,6 +62,7 @@ function buildConfig(env: WorkerEnv): AppConfig {
     PRICE_DECIMALS: env.PRICE_DECIMALS,
     TOKEN_MINT: env.TOKEN_MINT,
     TOKEN_HOLDER_THRESHOLD: env.TOKEN_HOLDER_THRESHOLD,
+    PREMIUM_TOKEN_THRESHOLD: env.PREMIUM_TOKEN_THRESHOLD,
     HOLDER_DISCOUNT_BPS: env.HOLDER_DISCOUNT_BPS,
     FREE_CALLS_PER_WALLET_PER_DAY: env.FREE_CALLS_PER_WALLET_PER_DAY,
     FREE_CALLS_TOKEN_THRESHOLD: env.FREE_CALLS_TOKEN_THRESHOLD,
@@ -79,6 +81,7 @@ function buildConfig(env: WorkerEnv): AppConfig {
     usdcMint: parsed.USDC_MINT,
     tokenMint: parsed.TOKEN_MINT,
     tokenHolderThreshold: BigInt(parsed.TOKEN_HOLDER_THRESHOLD),
+    premiumTokenThreshold: BigInt(parsed.PREMIUM_TOKEN_THRESHOLD),
     holderDiscountBps: parsed.HOLDER_DISCOUNT_BPS,
     freeCallsPerWalletPerDay: parsed.FREE_CALLS_PER_WALLET_PER_DAY,
     freeCallTokenThreshold: BigInt(parsed.FREE_CALLS_TOKEN_THRESHOLD),

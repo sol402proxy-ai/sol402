@@ -12,12 +12,14 @@ import { PayAiSolanaPayments } from './lib/payments.js';
 import adminRoutes from './routes/admin.js';
 import paywallRoutes from './routes/paywall.js';
 import siteRoutes from './routes/site.js';
+import linkRequestRoutes from './routes/link-requests.js';
 import { createAnalyticsStore, type AnalyticsStore } from './lib/analytics-store.js';
 import analyticsRoutes from './routes/analytics.js';
 import {
   HttpMetricsPublisher,
   type MetricsPublisher,
 } from './lib/metrics-publisher.js';
+import dashboardRoutes from './routes/dashboard.js';
 
 export interface AssetProvider {
   getTextAsset(path: string): Promise<string | undefined>;
@@ -305,6 +307,8 @@ export function createApp(options: CreateAppOptions = {}) {
 
   app.use('/p/:id', paywallMiddleware);
 
+  app.route('/', linkRequestRoutes);
+  app.route('/', dashboardRoutes);
   app.route('/', siteRoutes);
   app.route('/admin', adminRoutes);
   app.route('/p', paywallRoutes);

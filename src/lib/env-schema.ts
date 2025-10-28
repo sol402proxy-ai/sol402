@@ -12,6 +12,7 @@ export const envSchema = z.object({
   PRICE_DECIMALS: z.coerce.number().int().min(0).default(6),
   TOKEN_MINT: z.string().default('HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump'),
   TOKEN_HOLDER_THRESHOLD: z.coerce.number().int().min(0).default(2_000_000),
+  PREMIUM_TOKEN_THRESHOLD: z.coerce.number().int().min(0).default(5_000_000),
   HOLDER_DISCOUNT_BPS: z.coerce.number().int().min(0).default(2_500),
   FREE_CALLS_PER_WALLET_PER_DAY: z.coerce.number().int().min(0).default(5),
   FREE_CALLS_TOKEN_THRESHOLD: z.coerce.number().int().min(0).default(1_000_000),

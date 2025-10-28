@@ -48,12 +48,36 @@ Whether you hit the link from curl or a browser, the first response is HTTP 402 
 
 Retrying the same URL with a valid `X-PAYMENT` header settles the charge and streams the origin response back. See `tests/e2e.402-flow.test.ts` for a full stubbed example.
 
+### Request a paywalled link (self-serve)
+
+Use the hosted form at [sol402.app/link/request](https://sol402.app/link/request) or submit a request via API:
+
+```bash
+curl -X POST https://sol402.app/link/requests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "origin":"https://example.com/whitepaper.pdf",
+    "priceUsd":0.02,
+    "merchantAddress":"9x2ntrxwyz5WPA9mFeXUyAEiMNC3bZ9ZUXxYQ2dGVmPT",
+    "contactEmail":"founder@example.com",
+    "requestedBy":"Example Labs"
+  }'
+```
+
+The endpoint now responds with HTTP `201` and returns the live `/p/<id>` link, tier metadata, and a freshly minted API key. We verify your SOL402 balance on-chain, apply the right quota tier, and wire the link to your merchant wallet instantly. Admins can review submissions via `GET /admin/link-requests` for auditing, but no manual approval step is required.
+
+Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard) and paste the scoped API key you received. The dashboard verifies the key against the Worker, surfaces tier quotas, lifetime usage, and every `/p/` link tied to your merchant wallet.
+
 ## Key Routes
 
 - `POST /admin/links` — create a paywalled link (admin-key guarded).
+- `POST /link/requests` — public, rate-limited endpoint for publishers to mint a paywalled link instantly.
+- `GET /link/tiers/:wallet` — preview SOL402 balance, tier eligibility, and quotas for a given wallet.
+- `GET /admin/link-requests` — list auto-provisioned submissions (auditing only).
+- `POST /dashboard/session` / `GET /dashboard/links` — scoped endpoints for the publisher dashboard; authenticate with the self-serve API key to retrieve usage, quotas, and link metadata.
 - `GET /p/:id` — paywalled fetch with token perks, rate limiting, and proxy security; the first response is always a JSON 402 challenge.
 - `GET /admin/links/:id/preview` — admin-only passthrough to inspect origin content without payment.
-- Marketing & docs pages: `/`, `/api`, `/link`, `/pricing`, `/docs/quickstart`, `/token`, `/faq`, `/legal/terms`, `/legal/privacy`, `/changelog`, `/status`.
+- Marketing & docs pages: `/`, `/api`, `/link`, `/dashboard`, `/pricing`, `/docs/quickstart`, `/token`, `/faq`, `/legal/terms`, `/legal/privacy`, `/changelog`, `/status`.
 - Static assets: `/robots.txt`, `/sitemap.xml`, `/og.png` (for OG/Twitter cards).
 - `POST /analytics/events` — ingest marketing funnel events emitted by `window.sol402Track`.
 - Holder perks: wallets with ≥1M tokens get 5 free calls/day; reaching ≥2M applies the 25% discount automatically.
@@ -133,4 +157,3 @@ Retrying the same URL with a valid `X-PAYMENT` header settles the charge and str
 - `src/lib/` — pricing, token perks, security guards, rate limiter, and logging utilities.
 - `public/` — marketing assets (`robots.txt`, `sitemap.xml`, `og.png`).
 - `tests/` — unit, integration, and end-to-end coverage for payments, security, and proxying.
-

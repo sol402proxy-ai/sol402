@@ -18,7 +18,7 @@ describe('TokenBucketRateLimiter', () => {
     const limiter = new TokenBucketRateLimiter({
       capacity: 1,
       refillRate: 1,
-      refillIntervalMs: 1,
+      refillIntervalMs: 25,
     });
 
     expect(limiter.consume('rate')).toBe(true);
@@ -29,7 +29,7 @@ describe('TokenBucketRateLimiter', () => {
       setTimeout(() => {
         expect(limiter.consume('rate')).toBe(true);
         resolve();
-      }, 5);
+      }, 35);
     });
   });
 });
