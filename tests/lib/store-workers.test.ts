@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { createWorkersKVLinkStore } from '../../src/lib/store-workers.js';
 
 interface MockKV {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  get(key: string, options?: { cacheTtl?: number }): Promise<string | null>;
+  put(
+    key: string,
+    value: string,
+    options?: {
+      expiration?: number;
+      expirationTtl?: number;
+    }
+  ): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: {
     prefix?: string;
@@ -71,6 +78,8 @@ describe('WorkersKVLinkStore', () => {
     expect(created.tier).toBe('growth');
     expect(created.apiKeyPreview).toBe('SOL402-1234');
     expect(created.usage?.totalPaidCalls).toBe(0);
+
+    expect(await kv.get('link-api:hash-123')).toBe('kv-test');
 
     const fetched = await store.getLink('kv-test');
     expect(fetched?.origin).toBe('https://example.com/kv');

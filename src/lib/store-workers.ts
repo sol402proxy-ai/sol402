@@ -11,8 +11,20 @@ import type {
 import type { LinkStore } from './store.js';
 
 export interface WorkersKVNamespace {
-  get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  get(
+    key: string,
+    options?: {
+      cacheTtl?: number;
+    }
+  ): Promise<string | null>;
+  put(
+    key: string,
+    value: string,
+    options?: {
+      expiration?: number;
+      expirationTtl?: number;
+    }
+  ): Promise<void>;
   delete(key: string): Promise<void>;
   list(options?: {
     prefix?: string;
@@ -28,11 +40,13 @@ export interface WorkersKVNamespace {
 export interface WorkersKVLinkStoreOptions {
   prefix?: string;
   requestPrefix?: string;
+  apiIndexPrefix?: string;
   createId?: () => string;
 }
 
 const defaultPrefix = 'link:';
 const defaultRequestPrefix = 'request:';
+const defaultApiIndexPrefix = 'link-api:';
 
 function generateId(): string {
   const globalCrypto = (globalThis as { crypto?: { randomUUID?: () => string; getRandomValues?: <T extends ArrayBufferView>(array: T) => T } }).crypto;
@@ -216,11 +230,14 @@ export class WorkersKVLinkStore implements LinkStore {
 
   private readonly requestPrefix: string;
 
+  private readonly apiIndexPrefix: string;
+
   private readonly createId: () => string;
 
   constructor(private readonly kv: WorkersKVNamespace, options: WorkersKVLinkStoreOptions = {}) {
     this.prefix = options.prefix ?? defaultPrefix;
     this.requestPrefix = options.requestPrefix ?? defaultRequestPrefix;
+    this.apiIndexPrefix = options.apiIndexPrefix ?? defaultApiIndexPrefix;
     this.createId = options.createId ?? generateId;
   }
 
@@ -230,6 +247,10 @@ export class WorkersKVLinkStore implements LinkStore {
 
   private requestKey(id: string): string {
     return `${this.requestPrefix}${id}`;
+  }
+
+  private apiIndexKey(hash: string): string {
+    return `${this.apiIndexPrefix}${hash}`;
   }
 
   private cloneUsage(usage?: LinkUsage): LinkUsage | undefined {
@@ -278,11 +299,16 @@ export class WorkersKVLinkStore implements LinkStore {
     };
 
     await this.kv.put(this.key(id), encode(link));
+    if (link.apiKeyHash) {
+      const indexKey = this.apiIndexKey(link.apiKeyHash);
+      await this.kv.put(indexKey, id);
+      await this.ensureIndexPropagation(indexKey, id);
+    }
     return link;
   }
 
   async getLink(id: string): Promise<PaywallLink | undefined> {
-    const raw = await this.kv.get(this.key(id));
+    const raw = await this.kv.get(this.key(id), { cacheTtl: 0 });
     if (!raw) {
       return undefined;
     }
@@ -290,7 +316,11 @@ export class WorkersKVLinkStore implements LinkStore {
   }
 
   async deleteLink(id: string): Promise<void> {
+    const existing = await this.getLink(id);
     await this.kv.delete(this.key(id));
+    if (existing?.apiKeyHash) {
+      await this.kv.delete(this.apiIndexKey(existing.apiKeyHash));
+    }
   }
 
   async listLinksByMerchant(merchantAddress: string): Promise<PaywallLink[]> {
@@ -299,7 +329,7 @@ export class WorkersKVLinkStore implements LinkStore {
     });
     const links: PaywallLink[] = [];
     for (const key of response.keys) {
-      const raw = await this.kv.get(key.name);
+      const raw = await this.kv.get(key.name, { cacheTtl: 0 });
       if (!raw) {
         continue;
       }
@@ -316,12 +346,36 @@ export class WorkersKVLinkStore implements LinkStore {
     return links.length;
   }
 
+  private async ensureIndexPropagation(indexKey: string, expectedValue: string): Promise<void> {
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const current = await this.kv.get(indexKey, { cacheTtl: 0 });
+      if (current === expectedValue) {
+        return;
+      }
+      await this.delay(50 * (attempt + 1));
+    }
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async findLinkByApiKeyHash(hash: string): Promise<PaywallLink | undefined> {
+    const directKey = this.apiIndexKey(hash);
+    const directId = await this.kv.get(directKey, { cacheTtl: 0 });
+    if (directId) {
+      const link = await this.getLink(directId);
+      if (link && link.apiKeyHash === hash) {
+        return link;
+      }
+    }
+
     const response = await this.kv.list({
       prefix: this.prefix,
     });
     for (const entry of response.keys) {
-      const raw = await this.kv.get(entry.name);
+      const raw = await this.kv.get(entry.name, { cacheTtl: 0 });
       if (!raw) {
         continue;
       }
