@@ -325,13 +325,15 @@ dashboard.get('/dashboard/metrics', async (c) => {
         };
       const usage = link.usage;
       let lastPaymentIso: string | null = null;
-      if (usage?.lastPaymentAt) {
-        if (usage.lastPaymentAt instanceof Date) {
-          lastPaymentIso = usage.lastPaymentAt.toISOString();
-        } else {
-          const parsed = new Date(usage.lastPaymentAt);
-          lastPaymentIso = Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-        }
+      const lastPaymentValue = usage?.lastPaymentAt as unknown;
+      if (lastPaymentValue && typeof lastPaymentValue === 'object' && lastPaymentValue instanceof Date) {
+        lastPaymentIso = lastPaymentValue.toISOString();
+      } else if (typeof lastPaymentValue === 'string') {
+        const parsed = new Date(lastPaymentValue);
+        lastPaymentIso = Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+      } else if (typeof lastPaymentValue === 'number') {
+        const parsed = new Date(lastPaymentValue);
+        lastPaymentIso = Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
       }
       return {
         id: link.id,

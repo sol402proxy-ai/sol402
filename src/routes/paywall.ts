@@ -131,7 +131,7 @@ paywall.get('/:id', async (c) => {
             occurredAt: now,
           });
         } catch (analyticsError) {
-          logger.warn(
+          logger.error(
             'Failed to record analytics event',
             {
               linkId: link.id,
