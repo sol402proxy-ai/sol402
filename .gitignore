@@ -8,6 +8,7 @@ coverage/
 # Local env files
 .env
 .env.*
+!.env.example
 .dev.vars
 .dev.vars.*
 wrangler.secrets.toml
