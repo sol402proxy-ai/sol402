@@ -6,7 +6,21 @@ import type { MetricsPublisher } from './metrics-publisher.js';
 
 interface BalanceCacheEntry {
   balance: bigint;
+  decimals: number;
+  uiAmount: number;
+  uiAmountString: string;
+  fetchedAt: number;
   expiresAt: number;
+}
+
+type BalanceFetchResult = Omit<BalanceCacheEntry, 'expiresAt'>;
+
+export interface HolderBalanceDetails {
+  balance: bigint;
+  decimals: number;
+  uiAmount: number;
+  uiAmountString: string;
+  refreshedAt: Date;
 }
 
 interface TokenServiceOptions {
@@ -76,7 +90,30 @@ export class TokenPerksService {
       this.balanceCache.delete(owner);
     }
 
-    return this.getCachedBalance(owner);
+    const entry = await this.getCachedBalance(owner);
+    return entry.balance;
+  }
+
+  async getHolderBalanceDetails(
+    owner: string,
+    options: { fresh?: boolean } = {}
+  ): Promise<HolderBalanceDetails> {
+    if (!this.supportsBalanceChecks()) {
+      throw new Error('Token balance checks require a configured Solana connection and mint.');
+    }
+
+    if (options.fresh) {
+      this.balanceCache.delete(owner);
+    }
+
+    const entry = await this.getCachedBalance(owner);
+    return {
+      balance: entry.balance,
+      decimals: entry.decimals,
+      uiAmount: entry.uiAmount,
+      uiAmountString: entry.uiAmountString,
+      refreshedAt: new Date(entry.fetchedAt),
+    };
   }
 
   async adjustPrice(args: PriceAdjustmentArgs): Promise<PriceAdjustmentResult> {
@@ -116,7 +153,7 @@ export class TokenPerksService {
         this.logger?.debug('No Solana connection configured; skipping free-call threshold check.');
       } else {
         try {
-          holderBalance = await this.getCachedBalance(payer);
+          holderBalance = (await this.getCachedBalance(payer)).balance;
           eligibleForFreeCalls = holderBalance >= freeCallThreshold;
         } catch (error) {
           holderBalanceError = error;
@@ -195,7 +232,7 @@ export class TokenPerksService {
     }
 
     try {
-      const balance = holderBalance ?? (await this.getCachedBalance(payer));
+      const balance = holderBalance ?? (await this.getCachedBalance(payer)).balance;
       return balance >= threshold ? discountBps : 0;
     } catch (error) {
       this.logger?.warn('Failed to fetch SPL balance; skipping discount.', {
@@ -207,24 +244,32 @@ export class TokenPerksService {
     }
   }
 
-  private async getCachedBalance(owner: string): Promise<bigint> {
+  private async getCachedBalance(owner: string): Promise<BalanceCacheEntry> {
     const now = Date.now();
     const cached = this.balanceCache.get(owner);
     if (cached && cached.expiresAt > now) {
-      return cached.balance;
+      return cached;
     }
 
-    const balance = await this.fetchSplBalance(owner);
-    this.balanceCache.set(owner, {
-      balance,
+    const details = await this.fetchBalanceDetails(owner);
+    const entry: BalanceCacheEntry = {
+      ...details,
       expiresAt: now + this.cacheTtlMs,
-    });
-    return balance;
+    };
+    this.balanceCache.set(owner, entry);
+    return entry;
   }
 
-  private async fetchSplBalance(owner: string): Promise<bigint> {
+  private async fetchBalanceDetails(owner: string): Promise<BalanceFetchResult> {
     if (!this.connection || !this.config.tokenMint) {
-      return 0n;
+      const now = Date.now();
+      return {
+        balance: 0n,
+        decimals: 0,
+        uiAmount: 0,
+        uiAmountString: '0',
+        fetchedAt: now,
+      };
     }
 
     let attempt = 0;
@@ -234,13 +279,13 @@ export class TokenPerksService {
       attempt += 1;
       const attemptStart = Date.now();
       try {
-        const balance = await this.performBalanceFetch(owner);
+        const details = await this.performBalanceFetch(owner);
         const durationMs = Date.now() - attemptStart;
         this.logger?.debug('SPL balance fetch success', {
           owner,
           attempt,
           durationMs,
-          balance: balance.toString(),
+          balance: details.balance.toString(),
         });
         this.emitRpcMetric({
           owner,
@@ -248,7 +293,10 @@ export class TokenPerksService {
           durationMs,
           success: true,
         });
-        return balance;
+        return {
+          ...details,
+          fetchedAt: Date.now(),
+        };
       } catch (error) {
         lastError = error;
         const durationMs = Date.now() - attemptStart;
@@ -281,9 +329,14 @@ export class TokenPerksService {
     throw lastError ?? new Error('Failed to fetch SPL balance');
   }
 
-  protected async performBalanceFetch(owner: string): Promise<bigint> {
+  protected async performBalanceFetch(owner: string): Promise<Omit<BalanceFetchResult, 'fetchedAt'>> {
     if (!this.connection || !this.config.tokenMint) {
-      return 0n;
+      return {
+        balance: 0n,
+        decimals: 0,
+        uiAmount: 0,
+        uiAmountString: '0',
+      };
     }
 
     const ownerKey = new PublicKey(owner);
@@ -294,11 +347,44 @@ export class TokenPerksService {
     const accountInfo = await connection.getAccountInfo(ata);
 
     if (!accountInfo) {
-      return 0n;
+      return {
+        balance: 0n,
+        decimals: 0,
+        uiAmount: 0,
+        uiAmountString: '0',
+      };
     }
 
     const account = await connection.getTokenAccountBalance(ata);
-    return BigInt(account.value.amount);
+    const amount = BigInt(account.value.amount ?? '0');
+    const decimals = account.value.decimals ?? 0;
+    const decimalStringFromAmount = (): string => {
+      if (amount === 0n || decimals <= 0) {
+        return amount.toString();
+      }
+      const raw = amount.toString().padStart(decimals + 1, '0');
+      const separatorIndex = raw.length - decimals;
+      const integerPart = raw.slice(0, separatorIndex);
+      const fractionalPart = raw.slice(separatorIndex).replace(/0+$/, '');
+      return fractionalPart.length > 0 ? `${integerPart}.${fractionalPart}` : integerPart;
+    };
+
+    const uiAmount =
+      typeof account.value.uiAmount === 'number'
+        ? account.value.uiAmount
+        : Number(decimalStringFromAmount());
+
+    const uiAmountString =
+      typeof account.value.uiAmountString === 'string'
+        ? account.value.uiAmountString
+        : decimalStringFromAmount();
+
+    return {
+      balance: amount,
+      decimals,
+      uiAmount: Number.isFinite(uiAmount) ? uiAmount : Number(decimalStringFromAmount()),
+      uiAmountString,
+    };
   }
 
   // eslint-disable-next-line class-methods-use-this

@@ -30,6 +30,8 @@ const createLinkSchema = z.object({
   requestId: z.string().trim().uuid().optional(),
   notes: optionalNotes,
   adminNotes: optionalNotes,
+  webhookUrl: z.string().url().optional(),
+  webhookSecret: z.string().trim().min(8).max(256).optional(),
 });
 
 const listStatusSchema = z.enum(['pending', 'approved', 'rejected']).optional();
@@ -54,6 +56,8 @@ function toLinkResponse(
     apiKeyPreview: link.apiKeyPreview ?? null,
     dailyRequestCap: link.dailyRequestCap ?? null,
     maxActiveLinks: link.maxActiveLinks ?? null,
+    webhookUrl: link.webhookUrl ?? null,
+    webhookSecretPreview: link.webhookSecretPreview ?? null,
     usage: link.usage
       ? {
           totalPaidCalls: link.usage.totalPaidCalls,
@@ -135,10 +139,15 @@ admin.post('/links', async (c) => {
     requestId,
     notes,
     adminNotes,
+    webhookUrl,
+    webhookSecret,
   } = parsed.data;
 
   // Ensure URL passes quick validation before persisting.
   assertSafeHttpUrl(origin);
+  if (webhookUrl) {
+    assertSafeHttpUrl(webhookUrl);
+  }
 
   const store = c.get('store');
   const record = await store.createLink({
@@ -150,6 +159,9 @@ admin.post('/links', async (c) => {
     requestId,
     notes,
     adminNotes,
+    webhookUrl,
+    webhookSecret,
+    webhookSecretPreview: webhookSecret ? webhookSecret.slice(0, Math.min(10, webhookSecret.length)).toUpperCase() : undefined,
   });
 
   return c.json(

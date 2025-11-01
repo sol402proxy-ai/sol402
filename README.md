@@ -60,24 +60,34 @@ curl -X POST https://sol402.app/link/requests \
     "priceUsd":0.02,
     "merchantAddress":"9x2ntrxwyz5WPA9mFeXUyAEiMNC3bZ9ZUXxYQ2dGVmPT",
     "contactEmail":"founder@example.com",
-    "requestedBy":"Example Labs"
+    "requestedBy":"Example Labs",
+    "webhookUrl":"https://hooks.example.com/sol402",
+    "webhookSecret":"set-your-own-secret-or-omit"
   }'
 ```
 
 The endpoint now responds with HTTP `201` and returns the live `/p/<id>` link, tier metadata, and a freshly minted API key. We verify your SOL402 balance on-chain, apply the right quota tier, and wire the link to your merchant wallet instantly. Admins can review submissions via `GET /admin/link-requests` for auditing, but no manual approval step is required.
 
-Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard) and paste the scoped API key you received. The dashboard verifies the key against the Worker, surfaces tier quotas, lifetime usage, and every `/p/` link tied to your merchant wallet.
+Webhook fields are optional:
+
+- Supply `webhookUrl` to receive delivery POSTs after every paid or free fulfilment.
+- Provide `webhookSecret` to control the bearer token we sign requests with; omit it to have Sol402 mint a 56-character secret automatically.
+- The response payload includes a `webhookSecretPreview` (first 10 chars) so you can confirm which secret is active. The full secret is only shown once in the success card and API response—store it securely.
+
+Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard) and paste the scoped API key you received. The dashboard verifies your key, shows tier quotas & perks, surfaces your live SOL402 balance + next-tier delta, tracks webhook delivery health, and streams real-time analytics (paid/free calls, revenue, daily trend, top referrers, recent settlements) for every `/p/` link tied to your merchant wallet.
 
 ## Key Routes
 
 - `POST /admin/links` — create a paywalled link (admin-key guarded).
-- `POST /link/requests` — public, rate-limited endpoint for publishers to mint a paywalled link instantly.
+- `POST /link/requests` — public, rate-limited endpoint for publishers to mint a paywalled link instantly (supports optional `webhookUrl` + `webhookSecret` inputs).
 - `GET /link/tiers/:wallet` — preview SOL402 balance, tier eligibility, and quotas for a given wallet.
 - `GET /admin/link-requests` — list auto-provisioned submissions (auditing only).
 - `POST /dashboard/session` / `GET /dashboard/links` — scoped endpoints for the publisher dashboard; authenticate with the self-serve API key to retrieve usage, quotas, and link metadata.
+- `GET /dashboard/metrics` — fetches aggregated analytics (summary stats, trends, referrers, activity) for the merchant wallet tied to the scoped key.
+- `GET /dashboard/webhooks` — ClickHouse-backed webhook delivery metrics (24h success/failure counts, failure rate, recent attempts) that power the dashboard health card.
 - `GET /p/:id` — paywalled fetch with token perks, rate limiting, and proxy security; the first response is always a JSON 402 challenge.
 - `GET /admin/links/:id/preview` — admin-only passthrough to inspect origin content without payment.
-- Marketing & docs pages: `/`, `/api`, `/link`, `/dashboard`, `/pricing`, `/docs/quickstart`, `/token`, `/faq`, `/legal/terms`, `/legal/privacy`, `/changelog`, `/status`.
+- Marketing & docs pages: `/`, `/api`, `/dashboard`, `/pricing`, `/docs/quickstart`, `/token`, `/faq`, `/legal/terms`, `/legal/privacy`, `/changelog`, `/status`, `/link/request`.
 - Static assets: `/robots.txt`, `/sitemap.xml`, `/og.png` (for OG/Twitter cards).
 - `POST /analytics/events` — ingest marketing funnel events emitted by `window.sol402Track`.
 - Holder perks: wallets with ≥1M tokens get 5 free calls/day; reaching ≥2M applies the 25% discount automatically.
@@ -147,6 +157,7 @@ Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard
   ORDER BY (occurredAt, id);
   ```
   Set `ANALYTICS_SINK_URL` to the HTTPS endpoint, `ANALYTICS_SINK_DATABASE=sol402`, `ANALYTICS_SINK_TABLE=analytics_events`, and provide auth via `ANALYTICS_SINK_AUTH_HEADER`.
+- Webhook health uses the same table. The Worker emits `webhook_delivery_success` and `webhook_delivery_failure` events (props: `{ merchantAddress, linkId, webhookUrl, responseStatus, latencyMs, attempt, errorMessage, paid, priceUsd }`) after each dispatch. Ensure the analytics exporter reaches ClickHouse so `/dashboard/webhooks` can display 24h success/failure counts and recent delivery history.
 - Token holder discount RPC calls emit metrics to `RPC_METRICS_URL` so you can monitor Extrnode latency and failure rates. Provide an auth header via `RPC_METRICS_AUTH_HEADER` if your sink requires it. For Grafana Cloud Loki, set `RPC_METRICS_URL=https://logs-prod-028.grafana.net/loki/api/v1/push` and `RPC_METRICS_AUTH_HEADER=Basic <base64("1374949:<grafana-token>")>`.
 
 ## Project Structure

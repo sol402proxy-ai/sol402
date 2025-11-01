@@ -35,6 +35,9 @@ export interface PaywallLink {
   dailyRequestCap?: number;
   maxActiveLinks?: number;
   usage?: LinkUsage;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookSecretPreview?: string;
 }
 
 export interface CreateLinkInput {
@@ -53,6 +56,9 @@ export interface CreateLinkInput {
   dailyRequestCap?: number;
   maxActiveLinks?: number;
   usage?: LinkUsage;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookSecretPreview?: string;
 }
 
 export interface PriceQuote {
@@ -108,6 +114,8 @@ export interface LinkRequest {
   apiKeyPreview?: string;
   dailyRequestCap?: number;
   maxActiveLinks?: number;
+  webhookUrl?: string;
+  webhookSecretPreview?: string;
 }
 
 export interface CreateLinkRequestInput {
@@ -123,6 +131,8 @@ export interface CreateLinkRequestInput {
   apiKeyPreview?: string;
   dailyRequestCap?: number;
   maxActiveLinks?: number;
+  webhookUrl?: string;
+  webhookSecretPreview?: string;
 }
 
 export interface UpdateLinkRequestInput {
@@ -141,6 +151,8 @@ export interface UpdateLinkRequestInput {
   apiKeyPreview?: string;
   dailyRequestCap?: number;
   maxActiveLinks?: number;
+  webhookUrl?: string;
+  webhookSecretPreview?: string;
 }
 
 export interface ListLinkRequestsOptions {

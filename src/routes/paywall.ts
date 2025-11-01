@@ -14,6 +14,8 @@ paywall.get('/:id', async (c) => {
   const logger = c.get('logger');
   const priceQuote = c.get('priceQuote');
   const analyticsStore = c.get('analyticsStore');
+  const webhookDispatcher = c.get('webhookDispatcher');
+  const config = c.get('config');
 
   if (!link) {
     return c.json(
@@ -61,6 +63,8 @@ paywall.get('/:id', async (c) => {
     const upstream = await proxyFetch(link.origin);
     const now = new Date();
     const requestPath = new URL(c.req.url).pathname;
+    const merchantAddress = link.merchantAddress ?? config.merchantAddress;
+    const payer = c.req.header('x-payer') ?? undefined;
 
     const headers = filterResponseHeaders(upstream.headers);
     const response = new Response(upstream.body, {
@@ -73,15 +77,17 @@ paywall.get('/:id', async (c) => {
       response.headers.set('X-PAYMENT-RESPONSE', receipt);
     }
 
+    const isFreeCall = priceQuote
+      ? Boolean(priceQuote.freeQuotaUsed) || !priceQuote.priceUsd || priceQuote.priceUsd <= 0
+      : true;
+
     if (priceQuote) {
       const store = c.get('store');
-      const isFree =
-        Boolean(priceQuote.freeQuotaUsed) || !priceQuote.priceUsd || priceQuote.priceUsd <= 0;
       try {
         await store.recordLinkUsage(link.id, {
-          paidCallsDelta: isFree ? 0 : 1,
-          freeCallsDelta: isFree ? 1 : 0,
-          revenueUsdDelta: isFree ? 0 : priceQuote.priceUsd,
+          paidCallsDelta: isFreeCall ? 0 : 1,
+          freeCallsDelta: isFreeCall ? 1 : 0,
+          revenueUsdDelta: isFreeCall ? 0 : priceQuote.priceUsd,
           lastPaymentAt: now,
         });
       } catch (usageError) {
@@ -107,8 +113,8 @@ paywall.get('/:id', async (c) => {
               referrerHost = undefined;
             }
           }
-          await analyticsStore.record({
-            name: isFree ? 'link_free_call' : 'link_paid_call',
+          const analyticsRecord = await analyticsStore.record({
+            name: isFreeCall ? 'link_free_call' : 'link_paid_call',
             path: requestPath,
             props: {
               linkId: link.id,
@@ -130,6 +136,11 @@ paywall.get('/:id', async (c) => {
             referrer: referrerHeader,
             occurredAt: now,
           });
+          logger.debug('analytics_event_recorded', {
+            recordId: analyticsRecord.id,
+            name: analyticsRecord.name,
+            path: analyticsRecord.path,
+          });
         } catch (analyticsError) {
           logger.error(
             'Failed to record analytics event',
@@ -142,11 +153,30 @@ paywall.get('/:id', async (c) => {
       }
     }
 
+    const durationMs = Date.now() - start;
+
+    if (link.webhookUrl) {
+      const receipt = c.get('paymentReceipt');
+      await webhookDispatcher.dispatch({
+        link,
+        merchantAddress,
+        requestPath,
+        requestMethod: c.req.method ?? 'GET',
+        payer,
+        quote: priceQuote,
+        receipt,
+        isFree: isFreeCall,
+        responseStatus: upstream.status,
+        latencyMs: durationMs,
+        occurredAt: now,
+      });
+    }
+
     logger.info('Proxied origin response', {
       linkId: link.id,
       origin: link.origin,
       status: upstream.status,
-      durationMs: Date.now() - start,
+      durationMs,
       reason: priceQuote?.reason,
     });
 

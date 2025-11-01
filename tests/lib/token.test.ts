@@ -62,12 +62,23 @@ class RetryTokenPerksService extends TokenPerksService {
     });
   }
 
-  protected override async performBalanceFetch(): Promise<bigint> {
+  protected override async performBalanceFetch(): Promise<{
+    balance: bigint;
+    decimals: number;
+    uiAmount: number;
+    uiAmountString: string;
+  }> {
     this.attempts += 1;
     if (this.attempts <= this.failuresBeforeSuccess) {
       throw new Error('RPC unavailable');
     }
-    return this.succeedWith;
+    const ui = Number(this.succeedWith) / 1_000_000;
+    return {
+      balance: this.succeedWith,
+      decimals: 6,
+      uiAmount: ui,
+      uiAmountString: ui.toString(),
+    };
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
@@ -86,8 +97,19 @@ class BalanceTokenPerksService extends TokenPerksService {
     });
   }
 
-  protected override async performBalanceFetch(): Promise<bigint> {
-    return this.balance;
+  protected override async performBalanceFetch(): Promise<{
+    balance: bigint;
+    decimals: number;
+    uiAmount: number;
+    uiAmountString: string;
+  }> {
+    const ui = Number(this.balance) / 1_000_000;
+    return {
+      balance: this.balance,
+      decimals: 6,
+      uiAmount: ui,
+      uiAmountString: ui.toString(),
+    };
   }
 }
 

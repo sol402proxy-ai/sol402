@@ -85,6 +85,15 @@ function encode(link: PaywallLink): string {
   if (link.adminNotes) {
     payload.adminNotes = link.adminNotes;
   }
+  if (link.webhookUrl) {
+    payload.webhookUrl = link.webhookUrl;
+  }
+  if (link.webhookSecret) {
+    payload.webhookSecret = link.webhookSecret;
+  }
+  if (link.webhookSecretPreview) {
+    payload.webhookSecretPreview = link.webhookSecretPreview;
+  }
   if (link.tier) {
     payload.tier = link.tier;
   }
@@ -133,6 +142,9 @@ function decode(raw: string): PaywallLink {
     apiKeyPreview?: string;
     dailyRequestCap?: number;
     maxActiveLinks?: number;
+    webhookUrl?: string;
+    webhookSecret?: string;
+    webhookSecretPreview?: string;
     usage?: {
       totalPaidCalls: number;
       totalFreeCalls: number;
@@ -157,6 +169,9 @@ function decode(raw: string): PaywallLink {
     apiKeyPreview: payload.apiKeyPreview,
     dailyRequestCap: payload.dailyRequestCap,
     maxActiveLinks: payload.maxActiveLinks,
+    webhookUrl: payload.webhookUrl,
+    webhookSecret: payload.webhookSecret,
+    webhookSecretPreview: payload.webhookSecretPreview,
     usage: payload.usage
       ? {
           totalPaidCalls: payload.usage.totalPaidCalls ?? 0,
@@ -200,6 +215,8 @@ function decodeRequest(raw: string): LinkRequest {
     apiKeyPreview?: string;
     dailyRequestCap?: number;
     maxActiveLinks?: number;
+    webhookUrl?: string;
+    webhookSecretPreview?: string;
   };
 
   return {
@@ -222,6 +239,8 @@ function decodeRequest(raw: string): LinkRequest {
     apiKeyPreview: payload.apiKeyPreview,
     dailyRequestCap: payload.dailyRequestCap,
     maxActiveLinks: payload.maxActiveLinks,
+    webhookUrl: payload.webhookUrl,
+    webhookSecretPreview: payload.webhookSecretPreview,
   };
 }
 
@@ -295,6 +314,9 @@ export class WorkersKVLinkStore implements LinkStore {
       apiKeyPreview: input.apiKeyPreview,
       dailyRequestCap: input.dailyRequestCap,
       maxActiveLinks: input.maxActiveLinks,
+      webhookUrl: input.webhookUrl,
+      webhookSecret: input.webhookSecret,
+      webhookSecretPreview: input.webhookSecretPreview,
       usage,
     };
 
@@ -454,6 +476,8 @@ export class WorkersKVLinkStore implements LinkStore {
       apiKeyPreview: input.apiKeyPreview,
       dailyRequestCap: input.dailyRequestCap,
       maxActiveLinks: input.maxActiveLinks,
+      webhookUrl: input.webhookUrl,
+      webhookSecretPreview: input.webhookSecretPreview,
     };
 
     await this.kv.put(this.requestKey(id), encodeRequest(request));
@@ -526,6 +550,8 @@ export class WorkersKVLinkStore implements LinkStore {
       apiKeyPreview: update.apiKeyPreview ?? existing.apiKeyPreview,
       dailyRequestCap: update.dailyRequestCap ?? existing.dailyRequestCap,
       maxActiveLinks: update.maxActiveLinks ?? existing.maxActiveLinks,
+      webhookUrl: update.webhookUrl ?? existing.webhookUrl,
+      webhookSecretPreview: update.webhookSecretPreview ?? existing.webhookSecretPreview,
     };
 
     await this.kv.put(this.requestKey(id), encodeRequest(next));

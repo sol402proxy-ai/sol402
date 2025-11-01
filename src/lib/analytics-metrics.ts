@@ -142,7 +142,9 @@ export class AnalyticsMetricsService {
     private readonly config: AnalyticsMetricsConfig,
     options: AnalyticsMetricsOptions = {}
   ) {
-    this.fetchFn = options.fetchFn ?? fetch.bind(globalThis);
+    const baseFetch = options.fetchFn ?? fetch;
+    this.fetchFn = ((...args: Parameters<typeof fetch>) =>
+      baseFetch.apply(globalThis, args)) as typeof fetch;
     this.logger = options.logger;
     this.cacheTtlMs = options.cacheTtlMs ?? 60_000;
 
@@ -262,12 +264,18 @@ export class AnalyticsMetricsService {
         countIf(name = 'link_free_call') AS freeCallsTotal,
         countIf(name = 'link_free_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS freeCalls24h,
         countIf(name = 'link_free_call' AND toDate(occurredAt) = toDate(now())) AS freeCallsToday,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call') AS revenueUsdTotal,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS revenueUsd24h,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call' AND toDate(occurredAt) = toDate(now())) AS revenueUsdToday,
+        sumIf(JSONExtractFloat(toJSONString(props), 'priceUsd'), name = 'link_paid_call') AS revenueUsdTotal,
+        sumIf(
+          JSONExtractFloat(toJSONString(props), 'priceUsd'),
+          name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY
+        ) AS revenueUsd24h,
+        sumIf(
+          JSONExtractFloat(toJSONString(props), 'priceUsd'),
+          name = 'link_paid_call' AND toDate(occurredAt) = toDate(now())
+        ) AS revenueUsdToday,
         max(occurredAt) AS lastPaymentAt
       FROM ${this.tableIdentifier}
-      WHERE JSONExtractString(props, 'merchantAddress') = {wallet:String}
+      WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name IN ('link_paid_call', 'link_free_call')
       FORMAT JSON
     `;
@@ -279,9 +287,9 @@ export class AnalyticsMetricsService {
         toDate(occurredAt) AS bucketDate,
         countIf(name = 'link_paid_call') AS paidCalls,
         countIf(name = 'link_free_call') AS freeCalls,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call') AS revenueUsd
+        sumIf(JSONExtractFloat(toJSONString(props), 'priceUsd'), name = 'link_paid_call') AS revenueUsd
       FROM ${this.tableIdentifier}
-      WHERE JSONExtractString(props, 'merchantAddress') = {wallet:String}
+      WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name IN ('link_paid_call', 'link_free_call')
         AND occurredAt >= now() - INTERVAL 7 DAY
       GROUP BY bucketDate
@@ -293,16 +301,19 @@ export class AnalyticsMetricsService {
   private buildLinkQuery(): string {
     return `
       SELECT
-        JSONExtractString(props, 'linkId') AS linkId,
+        JSONExtractString(toJSONString(props), 'linkId') AS linkId,
         countIf(name = 'link_paid_call') AS paidCallsTotal,
         countIf(name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS paidCalls24h,
         countIf(name = 'link_free_call') AS freeCallsTotal,
         countIf(name = 'link_free_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS freeCalls24h,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call') AS revenueUsdTotal,
-        sumIf(JSONExtractFloat64(props, 'priceUsd'), name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS revenueUsd24h,
+        sumIf(JSONExtractFloat(toJSONString(props), 'priceUsd'), name = 'link_paid_call') AS revenueUsdTotal,
+        sumIf(
+          JSONExtractFloat(toJSONString(props), 'priceUsd'),
+          name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY
+        ) AS revenueUsd24h,
         max(occurredAt) AS lastPaymentAt
       FROM ${this.tableIdentifier}
-      WHERE JSONExtractString(props, 'merchantAddress') = {wallet:String}
+      WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name IN ('link_paid_call', 'link_free_call')
       GROUP BY linkId
       ORDER BY paidCalls24h DESC, paidCallsTotal DESC
@@ -313,13 +324,13 @@ export class AnalyticsMetricsService {
   private buildReferrerQuery(): string {
     return `
       SELECT
-        JSONExtractString(props, 'referrerHost') AS referrerHost,
+        JSONExtractString(toJSONString(props), 'referrerHost') AS referrerHost,
         count() AS paidCalls24h
       FROM ${this.tableIdentifier}
-      WHERE JSONExtractString(props, 'merchantAddress') = {wallet:String}
+      WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name = 'link_paid_call'
         AND occurredAt >= now() - INTERVAL 1 DAY
-        AND length(JSONExtractString(props, 'referrerHost')) > 0
+        AND length(JSONExtractString(toJSONString(props), 'referrerHost')) > 0
       GROUP BY referrerHost
       ORDER BY paidCalls24h DESC
       LIMIT 5
@@ -332,14 +343,14 @@ export class AnalyticsMetricsService {
       SELECT
         occurredAt,
         name,
-        JSONExtractString(props, 'linkId') AS linkId,
-        JSONExtractFloat64(props, 'priceUsd') AS priceUsd,
-        JSONExtractString(props, 'reason') AS reason,
-        JSONExtractString(props, 'referrerHost') AS referrerHost,
-        JSONExtractBool(props, 'discountApplied') AS discountApplied,
-        JSONExtractBool(props, 'freeQuotaUsed') AS freeQuotaUsed
+        JSONExtractString(toJSONString(props), 'linkId') AS linkId,
+        JSONExtractFloat(toJSONString(props), 'priceUsd') AS priceUsd,
+        JSONExtractString(toJSONString(props), 'reason') AS reason,
+        JSONExtractString(toJSONString(props), 'referrerHost') AS referrerHost,
+        JSONExtractBool(toJSONString(props), 'discountApplied') AS discountApplied,
+        JSONExtractBool(toJSONString(props), 'freeQuotaUsed') AS freeQuotaUsed
       FROM ${this.tableIdentifier}
-      WHERE JSONExtractString(props, 'merchantAddress') = {wallet:String}
+      WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name IN ('link_paid_call', 'link_free_call')
       ORDER BY occurredAt DESC
       LIMIT 25

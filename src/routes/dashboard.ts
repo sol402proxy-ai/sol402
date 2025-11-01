@@ -5,6 +5,7 @@ import type { HonoAppEnv } from '../app-context.js';
 import { hashApiKey, verifyApiKey } from '../lib/keys.js';
 import type { LinkTierId, PaywallLink } from '../types.js';
 import type { LinkMetrics } from '../lib/analytics-metrics.js';
+import { buildTierTable, getTierProgress } from '../lib/tiers.js';
 
 const sessionSchema = z.object({
   apiKey: z.string().trim().min(12, 'API key is required.'),
@@ -338,10 +339,12 @@ dashboard.get('/dashboard/metrics', async (c) => {
       return {
         id: link.id,
         origin: link.origin,
+        linkUrl: link.linkUrl,
         priceUsd: link.priceUsd ?? null,
         tier: link.tier ?? null,
         tierLabel: link.tierLabel ?? null,
         apiKeyPreview: link.apiKeyPreview ?? null,
+        createdAt: link.createdAt,
         stats,
         usage: usage
           ? {
@@ -381,6 +384,206 @@ dashboard.get('/dashboard/metrics', async (c) => {
       {
         error: 'analytics_error',
         message: 'Unable to load analytics metrics right now.',
+      },
+      502
+    );
+  }
+});
+
+dashboard.get('/dashboard/balance', async (c) => {
+  const authHeader = c.req.header('authorization') ?? c.req.header('x-api-key');
+  if (!authHeader) {
+    return c.json(
+      {
+        error: 'missing_credentials',
+        message: 'Provide your API key via Authorization: Bearer <key>.',
+      },
+      401
+    );
+  }
+
+  let apiKey = authHeader;
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    apiKey = authHeader.slice(7).trim();
+  }
+
+  const tokenService = c.get('tokenService');
+  if (!tokenService.supportsBalanceChecks()) {
+    return c.json(
+      {
+        error: 'balance_unavailable',
+        message: 'Token balance checks are not available in this environment.',
+      },
+      503
+    );
+  }
+
+  const result = await resolveScopedLinks(apiKey, c);
+  if (result.status !== 200) {
+    return c.json(result.body, result.status);
+  }
+
+  const merchantAddress = result.body.merchantAddress;
+  const forceFresh = (() => {
+    const query = c.req.query('fresh');
+    if (!query) return false;
+    const normalized = query.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true';
+  })();
+
+  try {
+    const details = await tokenService.getHolderBalanceDetails(merchantAddress, {
+      fresh: forceFresh,
+    });
+    const config = c.get('config');
+    const tiers = buildTierTable(config);
+    const { currentTier, nextTier } = getTierProgress(details.balance, tiers);
+
+    const deltaToNext = nextTier
+      ? nextTier.minBalance > details.balance
+        ? nextTier.minBalance - details.balance
+        : 0n
+      : null;
+
+    return c.json(
+      {
+        wallet: merchantAddress,
+        tokenMint: config.tokenMint,
+        balance: {
+          atomic: details.balance.toString(),
+          decimals: details.decimals,
+          uiAmount: details.uiAmount,
+          uiAmountString: details.uiAmountString,
+          refreshedAt: details.refreshedAt.toISOString(),
+        },
+        eligibility: {
+          freeCalls: details.balance >= config.freeCallTokenThreshold,
+          discount: details.balance >= config.tokenHolderThreshold,
+          premium: details.balance >= config.premiumTokenThreshold,
+        },
+        currentTier: currentTier
+          ? {
+              id: currentTier.id,
+              label: currentTier.label,
+              minBalance: currentTier.minBalance.toString(),
+              dailyRequestCap: currentTier.dailyRequestCap,
+              maxActiveLinks: currentTier.maxActiveLinks,
+            }
+          : null,
+        nextTier: nextTier
+          ? {
+              id: nextTier.id,
+              label: nextTier.label,
+              minBalance: nextTier.minBalance.toString(),
+              delta: deltaToNext ? deltaToNext.toString() : '0',
+            }
+          : null,
+        thresholds: {
+          baseline: config.freeCallTokenThreshold.toString(),
+          growth: config.tokenHolderThreshold.toString(),
+          premium: config.premiumTokenThreshold.toString(),
+        },
+      },
+      200
+    );
+  } catch (error) {
+    c.get('logger').error(
+      'Failed to fetch SOL402 balance for dashboard',
+      {
+        merchantAddress,
+      },
+      error
+    );
+    return c.json(
+      {
+        error: 'balance_check_failed',
+        message: 'Unable to load SOL402 balance right now. Please try again shortly.',
+      },
+      503
+    );
+  }
+});
+
+dashboard.get('/dashboard/webhooks', async (c) => {
+  const authHeader = c.req.header('authorization') ?? c.req.header('x-api-key');
+  if (!authHeader) {
+    return c.json(
+      {
+        error: 'missing_credentials',
+        message: 'Provide your API key via Authorization: Bearer <key>.',
+      },
+      401
+    );
+  }
+
+  let apiKey = authHeader;
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    apiKey = authHeader.slice(7).trim();
+  }
+
+  const result = await resolveScopedLinks(apiKey, c);
+  if (result.status !== 200) {
+    return c.json(result.body, result.status);
+  }
+
+  const webhookMetrics = c.get('webhookMetrics');
+  if (!webhookMetrics) {
+    return c.json(
+      {
+        featureAvailable: false,
+        summary: null,
+        recentDeliveries: [],
+      },
+      200
+    );
+  }
+
+  const logger = c.get('logger');
+
+  try {
+    const metrics = await webhookMetrics.getWebhookMetrics(result.body.merchantAddress);
+    const summary = metrics.summary;
+    const failurePercent = Number.isFinite(summary.failureRate24h)
+      ? Math.round(summary.failureRate24h * 1000) / 10
+      : 0;
+
+    return c.json(
+      {
+        featureAvailable: true,
+        generatedAt: metrics.generatedAt,
+        summary: {
+          success24h: summary.success24h,
+          failure24h: summary.failure24h,
+          failureRate24h: summary.failureRate24h,
+          failurePercent24h: failurePercent,
+          lastSuccessAt: summary.lastSuccessAt,
+          lastFailureAt: summary.lastFailureAt,
+        },
+        recentDeliveries: metrics.recentDeliveries.map((delivery) => ({
+          occurredAt: delivery.occurredAt,
+          status: delivery.status,
+          linkId: delivery.linkId,
+          webhookUrl: delivery.webhookUrl,
+          attempts: delivery.attempts,
+          responseStatus: delivery.responseStatus,
+          latencyMs: delivery.latencyMs,
+          errorMessage: delivery.errorMessage,
+        })),
+      },
+      200
+    );
+  } catch (error) {
+    logger.error(
+      'Failed to load webhook metrics',
+      {
+        merchantAddress: result.body.merchantAddress,
+      },
+      error
+    );
+    return c.json(
+      {
+        error: 'webhook_metrics_unavailable',
+        message: 'Unable to load webhook health right now.',
       },
       502
     );

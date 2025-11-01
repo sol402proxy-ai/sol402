@@ -6,6 +6,7 @@ export interface AnalyticsExporterOptions {
   sinkUrl?: string;
   authHeaderValue?: string;
   batchSize?: number;
+  pagesPerRun?: number;
   fetchFn?: typeof fetch;
   now?: () => number;
   console?: Pick<typeof console, 'info' | 'warn'>;
@@ -34,6 +35,8 @@ export class AnalyticsExporter {
 
   private readonly batchSize: number;
 
+  private readonly maxPagesPerRun: number;
+
   private readonly fetchFn: typeof fetch;
 
   private readonly now: () => number;
@@ -50,6 +53,7 @@ export class AnalyticsExporter {
     this.sinkUrl = options.sinkUrl;
     this.authHeaderValue = options.authHeaderValue;
     this.batchSize = options.batchSize ?? 50;
+    this.maxPagesPerRun = options.pagesPerRun ?? 1;
     this.fetchFn = options.fetchFn ?? fetch.bind(globalThis);
     this.now = options.now ?? Date.now;
     this.logger = options.console ?? console;
@@ -60,6 +64,7 @@ export class AnalyticsExporter {
   async exportAll(): Promise<number> {
     let cursor: string | undefined;
     let exported = 0;
+    let pagesProcessed = 0;
 
     do {
       const page = await this.list(cursor);
@@ -83,6 +88,14 @@ export class AnalyticsExporter {
       await Promise.all(entries.map((entry) => this.kv.delete(entry.id)));
       exported += entries.length;
       cursor = page.cursor;
+      pagesProcessed += 1;
+
+      if (cursor && pagesProcessed >= this.maxPagesPerRun) {
+        this.logger.info('analytics_exporter deferring remaining keys until next run', {
+          cursor,
+        });
+        cursor = undefined;
+      }
     } while (cursor);
 
     return exported;
@@ -202,8 +215,16 @@ export class AnalyticsExporter {
       });
 
       if (!response.ok) {
+        let errorText: string | undefined;
+        try {
+          errorText = await response.text();
+        } catch {
+          errorText = undefined;
+        }
         this.logger.warn('analytics_exporter sink returned non-2xx', {
           status: response.status,
+          statusText: response.statusText,
+          body: errorText?.slice(0, 256),
         });
         return false;
       }

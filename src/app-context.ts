@@ -7,6 +7,8 @@ import type { AnalyticsStore } from './lib/analytics-store.js';
 import type { PaymentRequirements } from './lib/payments.js';
 import type { PaywallLink, PaymentChallenge, PriceQuote } from './types.js';
 import type { AnalyticsMetricsService } from './lib/analytics-metrics.js';
+import type { WebhookMetricsService } from './lib/webhook-metrics.js';
+import type { WebhookDispatcher } from './lib/webhook-dispatcher.js';
 
 export interface AppVariables {
   store: LinkStore;
@@ -16,6 +18,8 @@ export interface AppVariables {
   tokenService: TokenPerksService;
   analyticsStore: AnalyticsStore;
   analyticsMetrics?: AnalyticsMetricsService;
+  webhookMetrics?: WebhookMetricsService;
+  webhookDispatcher: WebhookDispatcher;
   link?: PaywallLink;
   priceQuote?: PriceQuote;
   paymentReceipt?: string;

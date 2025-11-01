@@ -10,6 +10,8 @@ import { TokenPerksService } from './lib/token.js';
 import { createPaywallMiddleware } from './lib/x402.js';
 import { PayAiSolanaPayments } from './lib/payments.js';
 import { AnalyticsMetricsService } from './lib/analytics-metrics.js';
+import { WebhookMetricsService } from './lib/webhook-metrics.js';
+import { WebhookDispatcher } from './lib/webhook-dispatcher.js';
 import adminRoutes from './routes/admin.js';
 import paywallRoutes from './routes/paywall.js';
 import siteRoutes from './routes/site.js';
@@ -38,6 +40,8 @@ export interface CreateAppOptions {
   analyticsStore?: AnalyticsStore;
   metricsPublisher?: MetricsPublisher;
   analyticsMetrics?: AnalyticsMetricsService;
+  webhookMetrics?: WebhookMetricsService;
+  webhookDispatcher?: WebhookDispatcher;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -51,7 +55,7 @@ export function createApp(options: CreateAppOptions = {}) {
       ? new HttpMetricsPublisher({
           sinkUrl: config.rpcMetricsUrl,
           authHeaderValue: config.rpcMetricsAuthHeader,
-          fetchFn: fetch,
+          fetchFn: fetch.bind(globalThis),
           logger,
           serviceLabel: 'sol402-proxy',
         })
@@ -72,6 +76,29 @@ export function createApp(options: CreateAppOptions = {}) {
         }
       )
       : undefined);
+  const webhookMetrics =
+    options.webhookMetrics
+    ?? (config.analyticsSinkUrl && config.analyticsSinkTable
+      ? new WebhookMetricsService(
+        {
+          url: config.analyticsSinkUrl,
+          authHeader: config.analyticsSinkAuthHeader,
+          database: config.analyticsSinkDatabase,
+          table: config.analyticsSinkTable,
+        },
+        {
+          fetchFn: fetch,
+          logger,
+        }
+      )
+      : undefined);
+
+  const webhookDispatcher =
+    options.webhookDispatcher ??
+    new WebhookDispatcher({
+      analyticsStore,
+      logger,
+    });
 
   const connection = options.connection
     ?? (config.solanaRpcUrl ? new Connection(config.solanaRpcUrl, 'confirmed') : undefined);
@@ -108,6 +135,10 @@ export function createApp(options: CreateAppOptions = {}) {
     if (analyticsMetrics) {
       c.set('analyticsMetrics', analyticsMetrics);
     }
+    if (webhookMetrics) {
+      c.set('webhookMetrics', webhookMetrics);
+    }
+    c.set('webhookDispatcher', webhookDispatcher);
     await next();
   });
 

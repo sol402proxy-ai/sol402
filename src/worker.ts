@@ -69,6 +69,12 @@ function buildConfig(env: WorkerEnv): AppConfig {
     ADMIN_API_KEY: env.ADMIN_API_KEY,
     SOLANA_RPC_URL: env.SOLANA_RPC_URL,
     PORT: env.PORT,
+    RPC_METRICS_URL: env.RPC_METRICS_URL,
+    RPC_METRICS_AUTH_HEADER: env.RPC_METRICS_AUTH_HEADER,
+    ANALYTICS_SINK_URL: env.ANALYTICS_SINK_URL,
+    ANALYTICS_SINK_AUTH_HEADER: env.ANALYTICS_SINK_AUTH_HEADER,
+    ANALYTICS_SINK_DATABASE: env.ANALYTICS_SINK_DATABASE,
+    ANALYTICS_SINK_TABLE: env.ANALYTICS_SINK_TABLE,
   });
 
   return {
@@ -88,6 +94,10 @@ function buildConfig(env: WorkerEnv): AppConfig {
     solanaRpcUrl: parsed.SOLANA_RPC_URL,
     rpcMetricsUrl: parsed.RPC_METRICS_URL,
     rpcMetricsAuthHeader: parsed.RPC_METRICS_AUTH_HEADER,
+    analyticsSinkUrl: parsed.ANALYTICS_SINK_URL,
+    analyticsSinkAuthHeader: parsed.ANALYTICS_SINK_AUTH_HEADER,
+    analyticsSinkDatabase: parsed.ANALYTICS_SINK_DATABASE,
+    analyticsSinkTable: parsed.ANALYTICS_SINK_TABLE,
   };
 }
 
@@ -135,9 +145,11 @@ function createAnalyticsExporter(env: WorkerEnv) {
   return new AnalyticsExporter(env.ANALYTICS_KV, {
     sinkUrl: env.ANALYTICS_SINK_URL,
     authHeaderValue: env.ANALYTICS_SINK_AUTH_HEADER,
-    fetchFn: fetch,
+    fetchFn: fetch.bind(globalThis),
     database: env.ANALYTICS_SINK_DATABASE,
     table: env.ANALYTICS_SINK_TABLE,
+    batchSize: 40,
+    pagesPerRun: 1,
   });
 }
 

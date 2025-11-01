@@ -70,6 +70,9 @@ export class InMemoryLinkStore implements LinkStore {
       dailyRequestCap: input.dailyRequestCap,
       maxActiveLinks: input.maxActiveLinks,
       usage,
+      webhookUrl: input.webhookUrl,
+      webhookSecret: input.webhookSecret,
+      webhookSecretPreview: input.webhookSecretPreview,
     };
     this.links.set(id, record);
     return Promise.resolve(record);
@@ -179,6 +182,8 @@ export class InMemoryLinkStore implements LinkStore {
       apiKeyPreview: input.apiKeyPreview,
       dailyRequestCap: input.dailyRequestCap,
       maxActiveLinks: input.maxActiveLinks,
+      webhookUrl: input.webhookUrl,
+      webhookSecretPreview: input.webhookSecretPreview,
     };
     this.linkRequests.set(id, request);
     return Promise.resolve(request);
@@ -236,6 +241,8 @@ export class InMemoryLinkStore implements LinkStore {
       apiKeyPreview: update.apiKeyPreview ?? existing.apiKeyPreview,
       dailyRequestCap: update.dailyRequestCap ?? existing.dailyRequestCap,
       maxActiveLinks: update.maxActiveLinks ?? existing.maxActiveLinks,
+      webhookUrl: update.webhookUrl ?? existing.webhookUrl,
+      webhookSecretPreview: update.webhookSecretPreview ?? existing.webhookSecretPreview,
     };
 
     this.linkRequests.set(id, updated);

@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://sol402.app/</loc></url>
   <url><loc>https://sol402.app/api</loc></url>
-  <url><loc>https://sol402.app/link</loc></url>
+  <url><loc>https://sol402.app/link/request</loc></url>
   <url><loc>https://sol402.app/pricing</loc></url>
   <url><loc>https://sol402.app/docs/quickstart</loc></url>
   <url><loc>https://sol402.app/token</loc></url>

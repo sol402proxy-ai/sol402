@@ -5,6 +5,7 @@
 - ✅ Public `/link/requests` endpoint with rate limiting, validation, and SOL402 balance checks.
 - ✅ Instant provisioning: balance tiering + API key minting with no manual approval.
 - ✅ Marketing page at `/link/request` with client-side validation + analytics hook.
+- ✅ Optional webhook URL/secret capture wired through storage, APIs, and the self-serve UI (secret preview only shown once).
 - 🔜 Email notifications (e.g., Mailgun/Resend) to auto-acknowledge submissions.
 - ✅ Dashboard UX for publishers to review auto-provisioned links without curl.
 
@@ -14,30 +15,30 @@
 - Benefit: unlocks a “Spin up a paid endpoint in 60 seconds” flow we can showcase while PayAI finalises receipt verification.
 
 ## Data Model Updates
-- Extend `PaywallLink` to store `merchantAddress`, `contactEmail`, and `requester` metadata.
-- Persist submissions separately (KV prefix `request:`) with input validation state, tier metadata, and timestamps.
+- Extend `PaywallLink` to store `merchantAddress`, `contactEmail`, `requester`, and webhook credentials.
+- Persist submissions separately (KV prefix `request:`) with input validation state, tier metadata, webhook preview, and timestamps.
 - For existing links lacking `merchantAddress`, default to the global config wallet to preserve backwards compatibility.
 
 ## Backend Changes
-- Validation: require Solana address formatting for `merchantAddress`; enforce HTTPS origin whitelist using existing security guards.
+- Validation: require Solana address formatting for `merchantAddress`; enforce HTTPS origin whitelist using existing security guards; validate optional `webhookUrl` and accept either a supplied `webhookSecret` or auto-generate one per link.
 - Payment requirements: swap `config.merchantAddress` for `link.merchantAddress` when building x402 routes.
 - Tier automation:
   - Balance check via `TokenPerksService` to determine Baseline (≥1M), Growth (≥2M), or Premium (≥5M) tier.
   - Enforce per-tier link caps (3 / 10 / 25) before provisioning.
   - Mint hashed API keys + previews and persist quota metadata with the link.
 - Admin endpoints:
-  - `GET /admin/link-requests`: list auto-provisioned submissions for auditing.
+  - `GET /admin/link-requests`: list auto-provisioned submissions for auditing (includes webhook preview + URL when present).
 - Email notifications: integrate with transactional provider (Mailgun/Sendgrid/Resend) to acknowledge submissions (pending).
 
 ## Frontend Flow
 - Public page (`/link/request`):
-  - Form fields: origin URL, price (preset dropdown), Solana merchant address, email, optional notes.
-  - Client-side formatting hints (e.g., `Dkin…` examples).
-  - On success, show the minted link, tier summary, and API key preview with instructions to copy immediately.
+  - Form fields: origin URL, price (preset dropdown), Solana merchant address, email, optional notes, optional webhook URL + webhook secret (with inline helper copy).
+  - Client-side formatting hints (e.g., `Dkin…` examples) and webhook validation tips.
+  - On success, show the minted link, tier summary, API key preview, webhook URL, and full webhook secret (displayed once) with copy buttons and storage reminder.
 - Publisher dashboard (`/dashboard`):
   - Scoped API key authentication, local storage of the key (browser-only), refresh + clear controls.
   - Lifetime usage, quotas, and all `/p/` links rendered with copy buttons and tier badges.
-- Marketing copy: highlight instant provisioning, tier thresholds, and the self-serve dashboard.
+- Marketing copy: highlight instant provisioning, tier thresholds, webhook automation, and the self-serve dashboard.
 
 ## Security & Abuse Controls
 - Rate limit submissions per IP/email (reuse token bucket).

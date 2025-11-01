@@ -1,8 +1,16 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnalyticsMetricsService, WalletMetrics } from '../src/lib/analytics-metrics.js';
+import type { TokenPerksService } from '../src/lib/token.js';
+import type { WebhookMetricsService, WebhookMetricsSnapshot } from '../src/lib/webhook-metrics.js';
 
-async function createTestApp(analyticsMetrics?: AnalyticsMetricsService) {
+interface CreateTestAppOptions {
+  analyticsMetrics?: AnalyticsMetricsService;
+  tokenService?: TokenPerksService;
+  webhookMetrics?: WebhookMetricsService;
+}
+
+async function createTestApp(options: CreateTestAppOptions = {}) {
   const [{ createApp }, { createLinkStore }, { generateApiKey }] = await Promise.all([
     import('../src/app.js'),
     import('../src/lib/store.js'),
@@ -32,7 +40,12 @@ async function createTestApp(analyticsMetrics?: AnalyticsMetricsService) {
     lastPaymentAt: new Date('2024-01-01T00:00:00Z'),
   });
 
-  const app = createApp({ store, analyticsMetrics });
+  const app = createApp({
+    store,
+    analyticsMetrics: options.analyticsMetrics,
+    tokenService: options.tokenService,
+    webhookMetrics: options.webhookMetrics,
+  });
   return { app, apiKey, wallet, linkId: link.id };
 }
 
@@ -130,7 +143,7 @@ describe('dashboard routes', () => {
       })),
     } as unknown as AnalyticsMetricsService;
 
-    const { app, apiKey, linkId } = await createTestApp(analyticsStub);
+    const { app, apiKey, linkId } = await createTestApp({ analyticsMetrics: analyticsStub });
     linkIdRef = linkId;
 
     const response = await app.request('http://localhost/dashboard/metrics', {
@@ -146,6 +159,111 @@ describe('dashboard routes', () => {
     expect(payload.links[0].stats.paidCalls24h).toBe(4);
     expect(payload.recentActivity).toHaveLength(1);
     expect(analyticsStub.getWalletMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns token balance details for the merchant wallet', async () => {
+    const refreshedAt = new Date('2025-11-02T10:00:00Z');
+    const tokenServiceStub = {
+      supportsBalanceChecks: vi.fn(() => true),
+      getHolderBalanceDetails: vi.fn(async () => ({
+        balance: 2_500_000n,
+        decimals: 6,
+        uiAmount: 2.5,
+        uiAmountString: '2.5',
+        refreshedAt,
+      })),
+    } as unknown as TokenPerksService;
+
+    const { app, apiKey, wallet } = await createTestApp({ tokenService: tokenServiceStub });
+    const response = await app.request('http://localhost/dashboard/balance', {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.wallet).toBe(wallet);
+    expect(payload.balance.atomic).toBe('2500000');
+    expect(payload.balance.decimals).toBe(6);
+    expect(payload.balance.uiAmount).toBeCloseTo(2.5);
+    expect(payload.currentTier?.id).toBe('growth');
+    expect(payload.nextTier?.id).toBe('premium');
+    expect(payload.nextTier?.delta).toBe('2500000');
+    expect(tokenServiceStub.getHolderBalanceDetails).toHaveBeenCalledWith(wallet, { fresh: false });
+  });
+
+  it('returns placeholder webhook data', async () => {
+    const { app, apiKey } = await createTestApp();
+    const response = await app.request('http://localhost/dashboard/webhooks', {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.featureAvailable).toBe(false);
+    expect(Array.isArray(payload.recentDeliveries)).toBe(true);
+  });
+
+  it('returns webhook metrics when service configured', async () => {
+    const webhookSnapshot: WebhookMetricsSnapshot = {
+      generatedAt: '2025-11-03T12:00:00.000Z',
+      summary: {
+        success24h: 6,
+        failure24h: 2,
+        failureRate24h: 0.25,
+        lastSuccessAt: '2025-11-03T11:59:00.000Z',
+        lastFailureAt: '2025-11-03T10:30:00.000Z',
+      },
+      recentDeliveries: [
+        {
+          occurredAt: '2025-11-03T11:59:00.000Z',
+          status: 'success',
+          linkId: 'link-1',
+          webhookUrl: 'https://example.com/hook',
+          attempts: 1,
+          responseStatus: 200,
+          latencyMs: 320,
+          errorMessage: null,
+        },
+        {
+          occurredAt: '2025-11-03T10:30:00.000Z',
+          status: 'failure',
+          linkId: 'link-1',
+          webhookUrl: 'https://example.com/hook',
+          attempts: 2,
+          responseStatus: 500,
+          latencyMs: 540,
+          errorMessage: 'Internal Server Error',
+        },
+      ],
+    };
+
+    const webhookMetricsStub = {
+      getWebhookMetrics: vi.fn(async () => webhookSnapshot),
+    } as unknown as WebhookMetricsService;
+
+    const { app, apiKey } = await createTestApp({
+      webhookMetrics: webhookMetricsStub,
+    });
+
+    const response = await app.request('http://localhost/dashboard/webhooks', {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.featureAvailable).toBe(true);
+    expect(payload.summary.success24h).toBe(6);
+    expect(payload.summary.failurePercent24h).toBeCloseTo(25);
+    expect(payload.recentDeliveries).toHaveLength(2);
+    expect(payload.recentDeliveries[0]?.status).toBe('success');
+    expect(payload.recentDeliveries[1]?.errorMessage).toBe('Internal Server Error');
+    expect(webhookMetricsStub.getWebhookMetrics).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unknown API keys', async () => {

@@ -1,5 +1,13 @@
 # Analytics Dashboard Plan
 
+## Status
+- ✅ Metrics endpoint & caching deployed behind `/dashboard/metrics`.
+- ✅ Dashboard UI now displays live usage (summary cards, daily trend, top referrers, recent activity, per-link analytics).
+- ✅ `/dashboard/balance` returns live SOL402 balance + tier delta (leveraging cached RPC + tier helper).
+- ✅ `/dashboard/webhooks` queries ClickHouse for `webhook_delivery_*` events and powers the dashboard health card (falls back to copy when no events exist).
+- ✅ Webhook dispatcher now emits `webhook_delivery_success` / `webhook_delivery_failure` analytics events after every attempt.
+- ⏳ Remaining: ensure the cron exporter streams those events to ClickHouse in production, expand charts (latency timeline), and wire alerts once delivery logs accumulate.
+
 ## Objectives
 - Surface per-link and per-wallet usage stats (paid calls, free calls, revenue) inside `/dashboard`.
 - Provide holders with real-time insight into quota consumption, token perks, and webhook health.
@@ -9,7 +17,7 @@
 - **ClickHouse (analytics events table)** – records emitted by the Worker cron exporter (`ANALYTICS_SINK_*` secrets). We'll derive time-bucketed metrics (24h, 7d, lifetime) per link and wallet.
 - **KV Link Store** – authoritative store for link metadata (price, tier caps, previews). Used to hydrate dashboard cards.
 - **Solana RPC (Extrnode/Helius)** – fetch live SPL balance for the merchant wallet to display token perks in the dashboard.
-- **Webhook delivery logs** – not live yet; placeholder section will read from KV once webhooks are implemented.
+- **Webhook delivery events** – exported to ClickHouse as `webhook_delivery_success` / `webhook_delivery_failure`. The new metrics service reads these rows to populate the dashboard health card.
 - **New server-side analytics events (required)** – emit paywall settlement events when `recordLinkUsage` succeeds so we capture `linkId`, `merchantAddress`, `amountUsd`, `isFree`, and `referrer` in ClickHouse.
 
 ## Metrics & Aggregations
@@ -46,10 +54,9 @@
    - Integration tests using pre-baked ClickHouse responses to confirm JSON shape.
    - Rate limit & cache expiry tests.
 - **Instrumentation**
-   - Hook into `store.recordLinkUsage` (or immediately after successful proxy response) to enqueue analytics events:
-     - `link_paid_call` (props: `linkId`, `merchantAddress`, `priceUsd`, `requestId`, `referrer`, `walletTier`, `discountApplied`)
-     - `link_free_call` (props: `linkId`, `merchantAddress`, `reason`, `walletTier`)
-   - Ensure events include `occurredAt` and `path`/`name` values compatible with ClickHouse schema.
+  - Already wired: the paywall flow emits `link_paid_call` / `link_free_call` events (props include `linkId`, `merchantAddress`, `priceUsd`, `requestId`, `referrer`, `walletTier`, `discountApplied`/`reason`) right after successful settlement.
+  - Already wired: the webhook dispatcher emits `webhook_delivery_success` / `webhook_delivery_failure` with props `{ merchantAddress, linkId, webhookUrl, responseStatus, latencyMs, attempt, errorMessage, paid, priceUsd }`.
+  - Next steps: monitor the Worker cron/exporter to guarantee those events reach ClickHouse, add alerting for exporter failures, and backfill if any batches were missed.
 
 ## Frontend Work
 - **Fetch layer**
@@ -64,8 +71,8 @@
   - Recent activity table (timestamp, link, type, amount/usd, status).
   - Link performance list sorted by 24h volume.
 - **Webhook + quota modules**
-  - Quota meter showing % of daily cap used and alert when >80%.
-  - Webhook status card (placeholder copy until deliveries are tracked).
+  - ✅ Webhook status card renders 24h success/failure counts and recent deliveries whenever `webhook_delivery_*` events exist (falls back to copy otherwise).
+  - Quota meter showing % of daily cap used and alert when >80% (still pending).
 - **Mobile layout**
   - Stack cards, charts, and tables; keep refresh + tier info near top.
 
@@ -81,3 +88,33 @@
 3. Add charts/top referrers/recent activity once data is confirmed.
 4. Integrate token balance + webhook status modules.
 5. Update docs/tests and deploy.
+
+## Token Balance Widget Specification
+
+- **Backend contract**
+  - `GET /dashboard/balance` (auth via scoped key) → `{ wallet: string, tokenMint: string, balance: string, uiAmount: number, refreshedAt: string }`.
+  - Uses existing token perks service with live SPL balance fetch (Extrnode). Cache result in KV for 30 seconds to avoid RPC spam.
+  - On error (RPC unavailable), respond with `503` and include `{"message":"Token balance temporarily unavailable"}`.
+- **UI behaviour**
+  - Display current SOL402 balance, current tier, and next threshold delta (“2.3M SOL402 · Premium · 700k to Elite”).
+  - Refresh automatically when metrics poll runs; allow manual refresh via the existing Refresh button.
+  - Show warning state if balance drops below the tier needed for existing links (copy: “Balance dipped below Growth threshold—discounts pause after cooldown.”).
+- **Analytics**
+  - Fire `dashboard_balance_loaded` event with `tier` and `balance`.
+
+## Webhook Health Widget Specification
+
+- **Backend contract**
+  - `GET /dashboard/webhooks` (auth via scoped key) → `{ generatedAt, summary, recentDeliveries }` where `summary` contains `{ success24h, failure24h, failureRate24h, lastSuccessAt, lastFailureAt }`.
+  - Data source: ClickHouse `analytics_events` table filtered on `webhook_delivery_success` / `webhook_delivery_failure`.
+  - Cache for 60 seconds; rate-limit to 5/minute.
+- **UI behaviour**
+  - Card with status badge (“Delivered”/“Failed”), quick stats (24h counts + failure rate), and recent entries with attempts, latency, response code, error message.
+  - Empty state text: “Webhooks launch with Premium tier. You’ll see delivery history here once enabled.” (still shown when no events exist).
+- **Alerts**
+  - If failure rate >10% in last 24h, show red banner suggestion (“Reach out—delivery errors above 10%”).
+
+## Open Questions
+- Webhook exporter observability: add cron success/failure metrics so we know when ClickHouse insert jobs fall behind.
+- Should token balance polling be tied to wallet-connect events to avoid unnecessary RPC hits for inactive dashboards?
+- When balance falls below tier requirements, do we instantly downgrade link quotas or allow grace period? Need policy before final UI copy.

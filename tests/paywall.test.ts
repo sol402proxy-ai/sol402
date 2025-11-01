@@ -20,6 +20,7 @@ const baseConfig: AppConfig = {
   usdcMint: 'mint-test',
   tokenMint: 'TokenMint11111111111111111111111111111111',
   tokenHolderThreshold: 2_000_000n,
+  premiumTokenThreshold: 5_000_000n,
   holderDiscountBps: 2_500,
   freeCallsPerWalletPerDay: 5,
   freeCallTokenThreshold: 0n,
@@ -58,7 +59,7 @@ describe('paywall route', () => {
 
   async function createLink(
     app: Awaited<ReturnType<typeof bootstrapApp>>,
-    overrides?: { origin?: string; priceUsd?: number }
+    overrides?: { origin?: string; priceUsd?: number; webhookUrl?: string; webhookSecret?: string }
   ): Promise<string> {
     const response = await app.request('http://localhost/admin/links', {
       method: 'POST',
@@ -69,6 +70,8 @@ describe('paywall route', () => {
       body: JSON.stringify({
         origin: overrides?.origin ?? 'https://example.com/resource',
         priceUsd: overrides?.priceUsd ?? 0.005,
+        webhookUrl: overrides?.webhookUrl,
+        webhookSecret: overrides?.webhookSecret,
       }),
     });
 
@@ -208,6 +211,178 @@ describe('paywall route', () => {
     const payload = analyticsRecord.mock.calls[0]?.[0];
     expect(payload?.name).toBe('link_paid_call');
     expect(payload?.props?.linkId).toBe(linkId);
+  });
+
+  it('dispatches webhook and records delivery success analytics', async () => {
+    const analyticsRecord = vi.fn(
+      async (
+        event: Parameters<AnalyticsStore['record']>[0]
+      ): Promise<AnalyticsEventRecord> => ({
+        ...event,
+        id: `evt-${Date.now()}`,
+        receivedAt: new Date(),
+      })
+    );
+    const analyticsStore: AnalyticsStore = {
+      record: analyticsRecord,
+    };
+
+    const app = await bootstrapApp(undefined, undefined, analyticsStore);
+    const webhookUrl = 'https://hooks.sol402.app/notify';
+    const webhookSecret = 'whsec_test_secret';
+    const linkId = await createLink(app, {
+      webhookUrl,
+      webhookSecret,
+    });
+
+    const facilitatorHandler = createFacilitatorFetchHandler({
+      originResponse: () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }),
+    });
+
+    const webhookCalls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+          : (input as { url?: string } | undefined)?.url ?? '';
+
+      if (url === webhookUrl) {
+        webhookCalls.push({ url, init });
+        return new Response(JSON.stringify({ delivered: true }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        });
+      }
+
+      return facilitatorHandler(input, init);
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.stubGlobal('fetch', fetchMock as any);
+
+    const paymentHeader = createEncodedPaymentHeader();
+
+    const response = await app.request(`http://localhost/p/${linkId}`, {
+      headers: {
+        'x-payment': paymentHeader,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(webhookCalls).toHaveLength(1);
+    const call = webhookCalls[0];
+    expect(call.url).toBe(webhookUrl);
+    const headers = new Headers(call.init?.headers);
+    expect(headers.get('authorization')).toBe(`Bearer ${webhookSecret}`);
+    expect(headers.get('content-type')).toBe('application/json');
+    const bodyRaw = call.init?.body;
+    expect(typeof bodyRaw).toBe('string');
+    const body = JSON.parse(bodyRaw as string) as Record<string, unknown>;
+    expect(body.event).toBe('sol402.link.settled');
+    expect(body.request).toMatchObject({
+      method: 'GET',
+      path: `/p/${linkId}`,
+    });
+    expect(body.payment).toMatchObject({
+      status: 'paid',
+    });
+    expect(body.pricing).toMatchObject({
+      paid: true,
+    });
+
+    const recordedEvents = analyticsRecord.mock.calls.map((callArgs) => callArgs[0]);
+    const eventNames = recordedEvents.map((event) => event?.name);
+    expect(eventNames).toContain('link_paid_call');
+    expect(eventNames).toContain('webhook_delivery_success');
+    const webhookEvent = recordedEvents.find((event) => event?.name === 'webhook_delivery_success');
+    expect(webhookEvent?.props?.webhookUrl).toBe(webhookUrl);
+    expect(webhookEvent?.props?.responseStatus).toBe(200);
+    expect(webhookEvent?.props?.errorMessage).toBeNull();
+    expect(webhookEvent?.props?.attempt).toBe(1);
+    expect(webhookEvent?.props?.paid).toBe(true);
+  });
+
+  it('records webhook failure analytics when dispatcher returns non-2xx', async () => {
+    const analyticsRecord = vi.fn(
+      async (
+        event: Parameters<AnalyticsStore['record']>[0]
+      ): Promise<AnalyticsEventRecord> => ({
+        ...event,
+        id: `evt-${Date.now()}`,
+        receivedAt: new Date(),
+      })
+    );
+    const analyticsStore: AnalyticsStore = {
+      record: analyticsRecord,
+    };
+
+    const app = await bootstrapApp(undefined, undefined, analyticsStore);
+    const webhookUrl = 'https://hooks.sol402.app/notify';
+    const linkId = await createLink(app, {
+      webhookUrl,
+      webhookSecret: 'whsec_test_secret',
+    });
+
+    const facilitatorHandler = createFacilitatorFetchHandler({
+      originResponse: () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }),
+    });
+
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+          : (input as { url?: string } | undefined)?.url ?? '';
+
+      if (url === webhookUrl) {
+        return new Response('Internal Error', {
+          status: 500,
+          headers: {
+            'content-type': 'text/plain',
+          },
+        });
+      }
+
+      return facilitatorHandler(input, init);
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.stubGlobal('fetch', fetchMock as any);
+
+    const paymentHeader = createEncodedPaymentHeader();
+    const response = await app.request(`http://localhost/p/${linkId}`, {
+      headers: {
+        'x-payment': paymentHeader,
+      },
+    });
+
+    expect(response.status).toBe(200);
+
+    const recordedEvents = analyticsRecord.mock.calls.map((callArgs) => callArgs[0]);
+    const webhookEvent = recordedEvents.find(
+      (event) => event?.name === 'webhook_delivery_failure'
+    );
+    expect(webhookEvent?.props?.webhookUrl).toBe(webhookUrl);
+    expect(webhookEvent?.props?.responseStatus).toBe(500);
+    expect(typeof webhookEvent?.props?.errorMessage).toBe('string');
+    expect((webhookEvent?.props?.errorMessage ?? '').toLowerCase()).toContain('internal');
   });
 
   it('allows free quota bypass when payer qualifies', async () => {

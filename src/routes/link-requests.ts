@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { HonoAppEnv } from '../app-context.js';
 import { assertSafeHttpUrl } from '../lib/security.js';
 import { generateApiKey } from '../lib/keys.js';
-import type { LinkTierId } from '../types.js';
+import { buildTierTable, resolveTier } from '../lib/tiers.js';
 
 const solanaAddressSchema = z
   .string()
@@ -24,49 +24,11 @@ const createRequestSchema = z.object({
     .optional(),
   requestedBy: z.string().trim().max(160).optional(),
   notes: z.string().trim().max(1000).optional(),
+  webhookUrl: z.string().url().optional(),
+  webhookSecret: z.string().trim().min(8).max(256).optional(),
 });
 
 const linkRequests = new Hono<HonoAppEnv>();
-
-interface TierDefinition {
-  id: LinkTierId;
-  label: string;
-  minBalance: bigint;
-  dailyRequestCap: number;
-  maxActiveLinks: number;
-}
-
-function buildTierTable(config: HonoAppEnv['Variables']['config']): TierDefinition[] {
-  const tiers: TierDefinition[] = [
-    {
-      id: 'premium',
-      label: 'Premium',
-      minBalance: config.premiumTokenThreshold,
-      dailyRequestCap: 2_000,
-      maxActiveLinks: 25,
-    },
-    {
-      id: 'growth',
-      label: 'Growth',
-      minBalance: config.tokenHolderThreshold,
-      dailyRequestCap: 500,
-      maxActiveLinks: 10,
-    },
-    {
-      id: 'baseline',
-      label: 'Baseline',
-      minBalance: config.freeCallTokenThreshold,
-      dailyRequestCap: 200,
-      maxActiveLinks: 3,
-    },
-  ];
-
-  return tiers.sort((a, b) => Number(b.minBalance - a.minBalance));
-}
-
-function resolveTier(balance: bigint, tiers: TierDefinition[]): TierDefinition | undefined {
-  return tiers.find((tier) => balance >= tier.minBalance);
-}
 
 linkRequests.post('/link/requests', async (c) => {
   let payload: unknown;
@@ -94,7 +56,16 @@ linkRequests.post('/link/requests', async (c) => {
     );
   }
 
-  const { origin, priceUsd, merchantAddress, contactEmail, requestedBy, notes } = parsed.data;
+  const {
+    origin,
+    priceUsd,
+    merchantAddress,
+    contactEmail,
+    requestedBy,
+    notes,
+    webhookUrl,
+    webhookSecret,
+  } = parsed.data;
 
   const config = c.get('config');
 
@@ -108,6 +79,20 @@ linkRequests.post('/link/requests', async (c) => {
       },
       400
     );
+  }
+
+  if (webhookUrl) {
+    try {
+      assertSafeHttpUrl(webhookUrl);
+    } catch (error) {
+      return c.json(
+        {
+          error: 'invalid_webhook_url',
+          message: error instanceof Error ? error.message : 'Invalid webhook URL supplied.',
+        },
+        400
+      );
+    }
   }
 
   const rateLimiter = c.get('rateLimiter');
@@ -199,6 +184,7 @@ linkRequests.post('/link/requests', async (c) => {
     tierLabel: tier.label,
     dailyRequestCap: tier.dailyRequestCap,
     maxActiveLinks: tier.maxActiveLinks,
+    webhookUrl,
   });
 
   const logger = c.get('logger');
@@ -207,6 +193,24 @@ linkRequests.post('/link/requests', async (c) => {
     const { apiKey, hash: apiKeyHash, preview: apiKeyPreview } = await generateApiKey({
       prefix: 'sol402',
     });
+
+    let resolvedWebhookSecret: string | undefined;
+    let webhookSecretPreview: string | undefined;
+    if (webhookUrl) {
+      if (webhookSecret) {
+        resolvedWebhookSecret = webhookSecret;
+        webhookSecretPreview = webhookSecret
+          .slice(0, Math.min(10, webhookSecret.length))
+          .toUpperCase();
+      } else {
+        const generatedSecret = await generateApiKey({
+          prefix: 'whsec',
+          byteLength: 16,
+        });
+        resolvedWebhookSecret = generatedSecret.apiKey;
+        webhookSecretPreview = generatedSecret.preview;
+      }
+    }
 
     const link = await store.createLink({
       origin,
@@ -222,6 +226,9 @@ linkRequests.post('/link/requests', async (c) => {
       apiKeyPreview,
       dailyRequestCap: tier.dailyRequestCap,
       maxActiveLinks: tier.maxActiveLinks,
+      webhookUrl,
+      webhookSecret: resolvedWebhookSecret,
+      webhookSecretPreview,
     });
 
     await store.updateLinkRequest(request.id, {
@@ -238,6 +245,8 @@ linkRequests.post('/link/requests', async (c) => {
       apiKeyPreview,
       dailyRequestCap: tier.dailyRequestCap,
       maxActiveLinks: tier.maxActiveLinks,
+      webhookUrl,
+      webhookSecretPreview,
       processedAt: new Date(),
       adminNotes: 'Auto-provisioned via SOL402 self-serve flow.',
     });
@@ -273,6 +282,13 @@ linkRequests.post('/link/requests', async (c) => {
         discountEligible: balance >= config.tokenHolderThreshold,
         freeCallsEligible: balance >= config.freeCallTokenThreshold,
         createdAt: request.createdAt.toISOString(),
+        webhook: webhookUrl
+          ? {
+              url: webhookUrl,
+              secret: resolvedWebhookSecret,
+              secretPreview: webhookSecretPreview,
+            }
+          : null,
       },
       201
     );
