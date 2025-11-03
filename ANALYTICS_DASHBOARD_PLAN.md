@@ -6,7 +6,7 @@
 - ✅ `/dashboard/balance` returns live SOL402 balance + tier delta (leveraging cached RPC + tier helper).
 - ✅ `/dashboard/webhooks` queries ClickHouse for `webhook_delivery_*` events and powers the dashboard health card (falls back to copy when no events exist).
 - ✅ Webhook dispatcher now emits `webhook_delivery_success` / `webhook_delivery_failure` analytics events after every attempt.
-- ⏳ Remaining: ensure the cron exporter streams those events to ClickHouse in production, expand charts (latency timeline), and wire alerts once delivery logs accumulate.
+- ✅ Cron exporter tuned (5 × 40 batches/run) and verified in production; ClickHouse now holds live webhook + paywall events. Remaining: expand charts (latency timeline) and wire alerts once delivery logs accumulate.
 
 ## Objectives
 - Surface per-link and per-wallet usage stats (paid calls, free calls, revenue) inside `/dashboard`.
@@ -56,7 +56,7 @@
 - **Instrumentation**
   - Already wired: the paywall flow emits `link_paid_call` / `link_free_call` events (props include `linkId`, `merchantAddress`, `priceUsd`, `requestId`, `referrer`, `walletTier`, `discountApplied`/`reason`) right after successful settlement.
   - Already wired: the webhook dispatcher emits `webhook_delivery_success` / `webhook_delivery_failure` with props `{ merchantAddress, linkId, webhookUrl, responseStatus, latencyMs, attempt, errorMessage, paid, priceUsd }`.
-  - Next steps: monitor the Worker cron/exporter to guarantee those events reach ClickHouse, add alerting for exporter failures, and backfill if any batches were missed.
+  - Cron exporter now processes up to 200 records per run (five 40-event pages) and was smoke-tested end-to-end by seeding webhook events; continuing work is to add alerting for exporter failures and automate any required backfill.
 
 ## Frontend Work
 - **Fetch layer**

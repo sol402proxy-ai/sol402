@@ -138,7 +138,7 @@ Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard
 
 ### Analytics & Metrics
 
-- `/analytics/events` stores browser beacons in `ANALYTICS_KV`; the Worker cron (see `[[triggers]]` in `wrangler.toml`) batches them to `ANALYTICS_SINK_URL`.
+- `/analytics/events` stores browser beacons in `ANALYTICS_KV`; the Worker cron (see `[[triggers]]` in `wrangler.toml`) batches up to five pages of 40 events (≈200 records) per run to `ANALYTICS_SINK_URL`, keeping the queue drained without tripping Worker subrequest caps.
 - Recommended sink: ClickHouse Cloud. Create a service, generate an insert token, and create the table:
   ```sql
   CREATE TABLE sol402.analytics_events (
