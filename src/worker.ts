@@ -149,7 +149,7 @@ function createAnalyticsExporter(env: WorkerEnv) {
     database: env.ANALYTICS_SINK_DATABASE,
     table: env.ANALYTICS_SINK_TABLE,
     batchSize: 40,
-    pagesPerRun: 1,
+    pagesPerRun: 5,
   });
 }
 
