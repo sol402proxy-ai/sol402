@@ -181,12 +181,18 @@ export function createApp(options: CreateAppOptions = {}) {
         binaryContentType = 'image/jpeg';
       } else if (extension === 'svg') {
         binaryContentType = 'image/svg+xml';
+      } else if (extension === 'woff2') {
+        binaryContentType = 'font/woff2';
+      } else if (extension === 'woff') {
+        binaryContentType = 'font/woff';
+      } else if (extension === 'ttf') {
+        binaryContentType = 'font/ttf';
       }
-      const blob = new Blob([binary], { type: binaryContentType });
-      return new Response(blob, {
+      return new Response(binary, {
         status: 200,
         headers: {
           'content-type': binaryContentType,
+          'cache-control': 'public, max-age=31536000, immutable',
         },
       });
     });

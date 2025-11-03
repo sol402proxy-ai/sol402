@@ -1,4 +1,4 @@
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { colors, fonts, gradients, radii, shadows } from './theme.js';
 
@@ -4134,9 +4134,7 @@ export function renderPage(options: PageOptions) {
         <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png" />
         <link rel="icon" type="image/png" sizes="512x512" href="/assets/icon-512.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
-        <style>
-          ${globalStyles}
-        </style>
+        <style>${raw(globalStyles)}</style>
       </head>
       <body class="${bodyClass ?? ''}">
         ${renderHeader()}
