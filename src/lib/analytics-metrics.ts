@@ -127,6 +127,31 @@ interface CacheEntry {
   value: WalletMetrics;
 }
 
+interface GlobalSummaryRow {
+  requestsTotal?: number;
+  paidCallsTotal?: number;
+  freeCallsTotal?: number;
+  revenueUsdTotal?: number;
+  paidCalls24h?: number;
+  freeCalls24h?: number;
+  revenueUsd24h?: number;
+  discountApplied24h?: number;
+  freeQuotaUsed24h?: number;
+}
+
+export interface GlobalSummaryMetrics {
+  requestsTotal: number;
+  paidCallsTotal: number;
+  freeCallsTotal: number;
+  revenueUsdTotal: number;
+  paidCalls24h: number;
+  freeCalls24h: number;
+  revenueUsd24h: number;
+  discountApplied24h: number;
+  freeQuotaUsed24h: number;
+  generatedAt: string;
+}
+
 export class AnalyticsMetricsService {
   private readonly fetchFn: typeof fetch;
 
@@ -135,6 +160,13 @@ export class AnalyticsMetricsService {
   private readonly cacheTtlMs: number;
 
   private readonly cache = new Map<string, CacheEntry>();
+
+  private globalSummaryCache:
+  | {
+    expiresAt: number;
+    value: GlobalSummaryMetrics;
+  }
+  | undefined;
 
   private readonly tableIdentifier?: string;
 
@@ -170,6 +202,27 @@ export class AnalyticsMetricsService {
       expiresAt: now + this.cacheTtlMs,
     });
     return metrics;
+  }
+
+  async getGlobalSummary(): Promise<GlobalSummaryMetrics> {
+    if (!this.config.url || !this.tableIdentifier) {
+      throw new AnalyticsMetricsDisabledError();
+    }
+
+    const now = Date.now();
+    if (this.globalSummaryCache && this.globalSummaryCache.expiresAt > now) {
+      return this.globalSummaryCache.value;
+    }
+
+    const [row] = await this.query<GlobalSummaryRow>(this.buildGlobalSummaryQuery());
+    const summary = this.normalizeGlobalSummary(row);
+
+    this.globalSummaryCache = {
+      value: summary,
+      expiresAt: now + this.cacheTtlMs,
+    };
+
+    return summary;
   }
 
   private async loadWalletMetrics(wallet: string): Promise<WalletMetrics> {
@@ -255,6 +308,21 @@ export class AnalyticsMetricsService {
     return result;
   }
 
+  private normalizeGlobalSummary(row?: GlobalSummaryRow): GlobalSummaryMetrics {
+    return {
+      requestsTotal: numberOrZero(row?.requestsTotal),
+      paidCallsTotal: numberOrZero(row?.paidCallsTotal),
+      freeCallsTotal: numberOrZero(row?.freeCallsTotal),
+      revenueUsdTotal: numberOrZero(row?.revenueUsdTotal, true),
+      paidCalls24h: numberOrZero(row?.paidCalls24h),
+      freeCalls24h: numberOrZero(row?.freeCalls24h),
+      revenueUsd24h: numberOrZero(row?.revenueUsd24h, true),
+      discountApplied24h: numberOrZero(row?.discountApplied24h),
+      freeQuotaUsed24h: numberOrZero(row?.freeQuotaUsed24h),
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   private buildSummaryQuery(): string {
     return `
       SELECT
@@ -277,6 +345,35 @@ export class AnalyticsMetricsService {
       FROM ${this.tableIdentifier}
       WHERE JSONExtractString(toJSONString(props), 'merchantAddress') = {wallet:String}
         AND name IN ('link_paid_call', 'link_free_call')
+      FORMAT JSON
+    `;
+  }
+
+  private buildGlobalSummaryQuery(): string {
+    return `
+      SELECT
+        countIf(name IN ('link_paid_call', 'link_free_call')) AS requestsTotal,
+        countIf(name = 'link_paid_call') AS paidCallsTotal,
+        countIf(name = 'link_free_call') AS freeCallsTotal,
+        sumIf(JSONExtractFloat(toJSONString(props), 'priceUsd'), name = 'link_paid_call') AS revenueUsdTotal,
+        countIf(name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS paidCalls24h,
+        countIf(name = 'link_free_call' AND occurredAt >= now() - INTERVAL 1 DAY) AS freeCalls24h,
+        sumIf(
+          JSONExtractFloat(toJSONString(props), 'priceUsd'),
+          name = 'link_paid_call' AND occurredAt >= now() - INTERVAL 1 DAY
+        ) AS revenueUsd24h,
+        countIf(
+          name = 'link_paid_call'
+            AND occurredAt >= now() - INTERVAL 1 DAY
+            AND JSONExtractBool(toJSONString(props), 'discountApplied')
+        ) AS discountApplied24h,
+        countIf(
+          name = 'link_free_call'
+            AND occurredAt >= now() - INTERVAL 1 DAY
+            AND JSONExtractBool(toJSONString(props), 'freeQuotaUsed')
+        ) AS freeQuotaUsed24h
+      FROM ${this.tableIdentifier}
+      WHERE name IN ('link_paid_call', 'link_free_call')
       FORMAT JSON
     `;
   }

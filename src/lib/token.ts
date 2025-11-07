@@ -23,6 +23,14 @@ export interface HolderBalanceDetails {
   refreshedAt: Date;
 }
 
+export interface TokenSupplyDetails {
+  amount: bigint;
+  decimals: number;
+  uiAmount: number;
+  uiAmountString: string;
+  refreshedAt: Date;
+}
+
 interface TokenServiceOptions {
   connection?: Connection;
   cacheTtlMs?: number;
@@ -60,6 +68,16 @@ export class TokenPerksService {
   private readonly logger?: Logger;
   private readonly cacheTtlMs: number;
   private readonly balanceCache = new Map<string, BalanceCacheEntry>();
+  private tokenSupplyCache:
+  | {
+    amount: bigint;
+    decimals: number;
+    uiAmount: number;
+    uiAmountString: string;
+    fetchedAt: number;
+    expiresAt: number;
+  }
+  | undefined;
   private readonly quotaUsage = new Map<string, QuotaState>();
   private readonly maxRpcAttempts: number;
   private readonly retryBackoffMs: number;
@@ -114,6 +132,54 @@ export class TokenPerksService {
       uiAmountString: entry.uiAmountString,
       refreshedAt: new Date(entry.fetchedAt),
     };
+  }
+
+  async getTokenSupply(options: { fresh?: boolean } = {}): Promise<TokenSupplyDetails | null> {
+    if (!this.connection || !this.config.tokenMint) {
+      return null;
+    }
+
+    if (options.fresh) {
+      this.tokenSupplyCache = undefined;
+    }
+
+    const now = Date.now();
+    if (this.tokenSupplyCache && this.tokenSupplyCache.expiresAt > now) {
+      return {
+        amount: this.tokenSupplyCache.amount,
+        decimals: this.tokenSupplyCache.decimals,
+        uiAmount: this.tokenSupplyCache.uiAmount,
+        uiAmountString: this.tokenSupplyCache.uiAmountString,
+        refreshedAt: new Date(this.tokenSupplyCache.fetchedAt),
+      };
+    }
+
+    try {
+      const supply = await this.fetchTokenSupply();
+      const expiresAt = now + Math.max(this.cacheTtlMs, 120_000);
+      this.tokenSupplyCache = {
+        amount: supply.amount,
+        decimals: supply.decimals,
+        uiAmount: supply.uiAmount,
+        uiAmountString: supply.uiAmountString,
+        fetchedAt: supply.fetchedAt,
+        expiresAt,
+      };
+
+      return {
+        amount: supply.amount,
+        decimals: supply.decimals,
+        uiAmount: supply.uiAmount,
+        uiAmountString: supply.uiAmountString,
+        refreshedAt: new Date(supply.fetchedAt),
+      };
+    } catch (error) {
+      this.logger?.warn('Failed to fetch token supply', {
+        tokenMint: this.config.tokenMint,
+      });
+      this.logger?.debug('Token supply fetch error detail', { error });
+      return null;
+    }
   }
 
   async adjustPrice(args: PriceAdjustmentArgs): Promise<PriceAdjustmentResult> {
@@ -384,6 +450,47 @@ export class TokenPerksService {
       decimals,
       uiAmount: Number.isFinite(uiAmount) ? uiAmount : Number(decimalStringFromAmount()),
       uiAmountString,
+    };
+  }
+
+  private async fetchTokenSupply(): Promise<{
+    amount: bigint;
+    decimals: number;
+    uiAmount: number;
+    uiAmountString: string;
+    fetchedAt: number;
+  }> {
+    if (!this.connection || !this.config.tokenMint) {
+      const fetchedAt = Date.now();
+      return {
+        amount: 0n,
+        decimals: 0,
+        uiAmount: 0,
+        uiAmountString: '0',
+        fetchedAt,
+      };
+    }
+
+    const mintKey = new PublicKey(this.config.tokenMint);
+    const result = await this.connection.getTokenSupply(mintKey);
+
+    const amount = BigInt(result.value.amount ?? '0');
+    const decimals = result.value.decimals ?? 0;
+    const uiAmount =
+      typeof result.value.uiAmount === 'number'
+        ? result.value.uiAmount
+        : Number.parseFloat(result.value.uiAmountString ?? '0');
+    const uiAmountString =
+      typeof result.value.uiAmountString === 'string'
+        ? result.value.uiAmountString
+        : amount.toString();
+
+    return {
+      amount,
+      decimals,
+      uiAmount: Number.isFinite(uiAmount) ? uiAmount : 0,
+      uiAmountString,
+      fetchedAt: Date.now(),
     };
   }
 

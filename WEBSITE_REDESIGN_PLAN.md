@@ -107,6 +107,7 @@ This roadmap translates the **Sol402 Website Redesign Playbook** into actionable
 - Ensure testimonials carousel auto-plays with pause-on-hover/touch.
 - Implement nav scroll compression + progress bar if desired.
 - Acceptance: Animations smooth, no layout jank, 60fps on desktop.
+- Status: ✅ Completed (2025-11-04) — testimonial carousel now auto-plays with pause-on-hover/touch controls, sticky nav compresses on scroll with a progress indicator, the reveal/hover system remains smooth under reduced-motion preferences, and branded logomarks now appear across hero surfaces.
 
 ### 4B. Comprehensive QA
 - Devices: desktop, laptop, tablet (portrait/landscape), mobile.

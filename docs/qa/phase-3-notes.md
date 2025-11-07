@@ -29,3 +29,12 @@
 - Check top referrers list collapses to “Direct / unknown” when hosts missing and truncates long domains without overflow.
 - Ensure recent activity feed links resolve to paywalled URLs, display free/discount badges, and handle entries without referrer data.
 - Webhook health card: confirm it hides when no events exist, shows 24h success/failure counts when `webhook_delivery_*` events are present, and renders error copy on 502 responses.
+
+## Phase 4A Interaction Polish Checks
+
+- Validate new scroll-triggered animations on /, /pricing, /token, /docs/quickstart, /link/request, and /dashboard across desktop + mobile breakpoints (ensure `prefers-reduced-motion` disables gracefully).
+- Home testimonials carousel: confirm autoplay cadence (~6.5 s) with pause-on-hover/touch/focus, dots update on manual selection, and reduced-motion disables timers.
+- Sticky nav polish: verify compression triggers after ~30px scroll, progress bar reflects document scroll depth, and state resets when drawers open.
+- Verify branded logomark badges render crisply on every hero (home, pricing, token, docs, link builder, dashboard, API, demo, FAQ, terms, privacy, changelog, status) and scale down correctly on mobile breakpoints.
+- Confirm hover/focus elevation states on card components (feature cards, analytics panels, dashboard cards, FAQ items) remain keyboard-accessible and do not introduce layout shift.
+- Capture screenshots or note any sections where animation timing feels heavy; adjust `data-animate-delay` per section if QA feedback calls it out.

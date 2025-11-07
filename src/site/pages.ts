@@ -28,9 +28,39 @@ curl -i https://sol402.app/p/<linkId>
 curl -i https://sol402.app/p/<linkId> \\
   -H "X-PAYMENT: <receipt-from-payai>"`;
 
+type BrandBadgeVariant = 'hero' | 'section' | 'card' | 'document';
+
+const brandBadgeSizes: Record<BrandBadgeVariant, number> = {
+  hero: 120,
+  section: 96,
+  card: 72,
+  document: 64,
+};
+
+const brandBadge = (
+  variant: BrandBadgeVariant = 'hero',
+  { decorative = false }: { decorative?: boolean } = {}
+) => {
+  const size = brandBadgeSizes[variant] ?? brandBadgeSizes.hero;
+  return html`<figure
+    class="brand-badge brand-badge--${variant}"
+    ${decorative ? html`aria-hidden="true"` : ''}
+  >
+    <img
+      src="/assets/sol402-logo.png"
+      width="${size}"
+      height="${size}"
+      loading="lazy"
+      decoding="async"
+      alt="${decorative ? '' : 'Sol402 logomark'}"
+    />
+  </figure>`;
+};
+
 const docsHero = html`<section class="docs-hero">
   <div class="docs-hero__grid">
-    <div class="docs-hero__copy">
+    <div class="docs-hero__copy" data-animate="fade-up">
+      ${brandBadge('hero', { decorative: true })}
       <span class="eyebrow">Quickstart</span>
       <h1>Run the Sol402 paywall in five minutes</h1>
       <p class="subhead">
@@ -60,7 +90,7 @@ const docsHero = html`<section class="docs-hero">
         <li>Analytics: ClickHouse + Grafana exporters</li>
       </ul>
     </div>
-    <aside class="docs-hero__snippet">
+    <aside class="docs-hero__snippet" data-animate="scale-in" data-animate-delay="140">
       <header>
         <span>Minimal curl flow</span>
         <button
@@ -245,7 +275,8 @@ const docsFaq = html`<section class="section docs-faq">
 
 const linkHero = html`<section class="link-hero">
   <div class="link-hero__grid">
-    <div class="link-hero__copy">
+    <div class="link-hero__copy" data-animate="fade-up">
+      ${brandBadge('hero', { decorative: true })}
       <span class="eyebrow">Self-serve builder</span>
       <h1>Launch a Sol402 paywall from your wallet</h1>
       <p class="subhead">
@@ -266,7 +297,7 @@ const linkHero = html`<section class="link-hero">
         <li>Tier perks apply instantly based on your on-chain balance.</li>
       </ul>
     </div>
-    <aside class="link-hero__panel">
+    <aside class="link-hero__panel" data-animate="scale-in" data-animate-delay="160">
       <header>
         <span class="link-hero__label">Tier fast facts</span>
         <p>Eligibility updates the moment your wallet crosses the threshold.</p>
@@ -1051,9 +1082,14 @@ const linkBuilderSupport = html`<section class="link-builder-support">
 </section>`;
 
 const homeHero = html`<section class="hero hero--home">
-  <div class="hero__content">
-    <span class="eyebrow">SOL402 • X402 NATIVE</span>
-    <h1>Paywall anything in under 10 seconds</h1>
+  <div class="hero__content" data-animate="fade-up">
+    <div class="hero__heading">
+      ${brandBadge('hero')}
+      <div class="hero__heading-copy">
+        <span class="eyebrow">SOL402 • X402 NATIVE</span>
+        <h1>Paywall anything in under 10 seconds</h1>
+      </div>
+    </div>
     <p class="subhead">
       Connect your wallet, point us at a URL, and spin up a pay-per-request endpoint that settles in USDC
       on Solana. Agents, browsers, and bots all follow the same 402 → pay → retry handshake.
@@ -1069,71 +1105,42 @@ const homeHero = html`<section class="hero hero--home">
         Watch the demo
       </a>
     </div>
-    <div class="hero-metrics" data-analytics-click="home_metrics">
-      <div class="hero-metric">
+    <div class="hero-metrics" data-analytics-click="home_metrics" hidden>
+      <div class="hero-metric" data-animate="fade-up">
         <span class="hero-metric__label">Requests served</span>
         <span class="hero-metric__value" data-metric="requests">128,940</span>
         <span class="hero-metric__hint">Realtime paywalled calls routed</span>
       </div>
-      <div class="hero-metric">
+      <div class="hero-metric" data-animate="fade-up" data-animate-delay="90">
         <span class="hero-metric__label">USDC settled</span>
         <span class="hero-metric__value" data-metric="settled">$6,447.12</span>
         <span class="hero-metric__hint">Direct to your merchant wallet</span>
       </div>
-      <div class="hero-metric">
+      <div class="hero-metric" data-animate="fade-up" data-animate-delay="180">
         <span class="hero-metric__label">SOL402 in circulation</span>
         <span class="hero-metric__value" data-metric="supply">18.3M</span>
         <span class="hero-metric__hint">Baseline tier opens at 1M tokens</span>
       </div>
     </div>
   </div>
-  <div class="hero__visual">
-    <div class="hero-preview">
-      <div class="hero-preview__badge">Live dashboard</div>
-      <div class="hero-preview__card">
-        <header>
-          <span>Link revenue</span>
-          <strong>$482.30</strong>
-        </header>
-        <ul>
-          <li>
-            <span class="hero-preview__label">Paid calls (24h)</span>
-            <span class="hero-preview__value">1,284</span>
-          </li>
-          <li>
-            <span class="hero-preview__label">Free calls used</span>
-            <span class="hero-preview__value">42 / 150</span>
-          </li>
-          <li>
-            <span class="hero-preview__label">Discount applied</span>
-            <span class="hero-preview__value">25%</span>
-          </li>
-        </ul>
-        <footer>
-          <span class="hero-preview__wallet">Dkin…iat2W</span>
-          <span class="hero-preview__status">Settling via PayAI</span>
-        </footer>
-      </div>
-      <div class="hero-preview__glow"></div>
-    </div>
-  </div>
+  <div class="hero__visual hero__visual--empty" aria-hidden="true"></div>
 </section>`;
 
 const homeSocialProof = html`<section class="section section--social">
-  <div class="social-strip">
+  <div class="social-strip" data-animate="fade-up" data-animate-delay="140">
     <span class="social-strip__label">Backed by builders shipping the x402 stack</span>
-    <div class="social-strip__logos">
-      <span>PayAI</span>
-      <span>Solana</span>
-      <span>Extrnode</span>
-      <span>Pump.fun</span>
-      <span>Dexscreener</span>
+    <div class="social-strip__logos" aria-label="Partners powering Sol402">
+      <img src="/assets/partners/payai.png" alt="PayAI" loading="lazy" decoding="async" />
+      <img src="/assets/partners/solana.png" alt="Solana" loading="lazy" decoding="async" />
+      <img src="/assets/partners/cloudflare.png" alt="Cloudflare" loading="lazy" decoding="async" />
+      <img src="/assets/partners/clickhouse.png" alt="ClickHouse" loading="lazy" decoding="async" />
+      <img src="/assets/partners/extrnode.png" alt="Extrnode" loading="lazy" decoding="async" />
     </div>
   </div>
 </section>`;
 
 const homeHowItWorks = html`<section class="section section--steps">
-  <div class="section__header">
+  <div class="section__header" data-animate="fade-up">
     <h2>Ship the 402 handshake in minutes</h2>
     <p class="section__subhead">
       No SDK lock-in. We verify the payment, route the request, and stream the exact origin response
@@ -1142,7 +1149,7 @@ const homeHowItWorks = html`<section class="section section--steps">
   </div>
   <div class="steps-layout">
     <div class="steps-grid">
-      <article class="step-card">
+      <article class="step-card" data-animate="fade-up">
         <span class="step-card__index">01</span>
         <h3 class="step-card__title">Generate your link</h3>
         <p class="step-card__body">
@@ -1150,7 +1157,7 @@ const homeHowItWorks = html`<section class="section section--steps">
           dashboard in a single response.
         </p>
       </article>
-      <article class="step-card">
+      <article class="step-card" data-animate="fade-up" data-animate-delay="90">
         <span class="step-card__index">02</span>
         <h3 class="step-card__title">Serve the challenge</h3>
         <p class="step-card__body">
@@ -1158,7 +1165,7 @@ const homeHowItWorks = html`<section class="section section--steps">
           humans pay via any Solana wallet.
         </p>
       </article>
-      <article class="step-card">
+      <article class="step-card" data-animate="fade-up" data-animate-delay="180">
         <span class="step-card__index">03</span>
         <h3 class="step-card__title">Get paid automatically</h3>
         <p class="step-card__body">
@@ -1167,24 +1174,26 @@ const homeHowItWorks = html`<section class="section section--steps">
         </p>
       </article>
     </div>
-    <div class="steps-visual steps-visual--placeholder">
-      <p>
-        Request → 402 challenge → PayAI facilitator → Paid retry<br />
-        <span>Visual timeline shipping with the final artwork.</span>
-      </p>
+    <div class="steps-visual" data-animate="scale-in" data-animate-delay="220">
+      <img
+        src="/assets/home-flow.png"
+        alt="Three step paywall flow: challenge, PayAI facilitator, paid response"
+        loading="lazy"
+        decoding="async"
+      />
     </div>
   </div>
 </section>`;
 
 const homeFeatureGrid = html`<section class="section section--features">
-  <div class="section__header">
+  <div class="section__header" data-animate="fade-up">
     <h2>Designed for fast paywalls and faster iteration</h2>
     <p class="section__subhead">
       Auto-provisioned infrastructure, dynamic pricing, and token-native perks straight out of the box.
     </p>
   </div>
   <div class="feature-grid">
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up">
       <h3>Instant onboarding</h3>
       <p>
         Connect your wallet, choose an origin, and we mint scoped credentials plus a dashboard in one
@@ -1195,7 +1204,7 @@ const homeFeatureGrid = html`<section class="section section--features">
         <li>Wallet custody always stays with you</li>
       </ul>
     </article>
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up" data-animate-delay="90">
       <h3>Dynamic pricing</h3>
       <p>
         Price URLs and APIs independently. Adjust on demand or hook into your own logic via the admin API.
@@ -1205,7 +1214,7 @@ const homeFeatureGrid = html`<section class="section section--features">
         <li>Token discounts applied automatically</li>
       </ul>
     </article>
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up" data-animate-delay="180">
       <h3>SOL402 utility</h3>
       <p>
         Holders unlock discounted calls, higher quotas, and automation-only onboarding with no manual
@@ -1216,7 +1225,7 @@ const homeFeatureGrid = html`<section class="section section--features">
         <li>2M tokens: 25% discount, more capacity</li>
       </ul>
     </article>
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up" data-animate-delay="270">
       <h3>Analytics that ship</h3>
       <p>
         Real-time dashboard backed by ClickHouse, with exports to your Grafana or custom sinks.
@@ -1229,21 +1238,24 @@ const homeFeatureGrid = html`<section class="section section--features">
   </div>
 </section>`;
 
-const homeAnalytics = html`<section class="section section--analytics">
-  <div class="section__header">
+const homeAnalytics = html`<section class="section section--analytics" hidden>
+  <div class="section__header" data-animate="fade-up">
     <h2>Your dashboard, streaming in real time</h2>
     <p class="section__subhead">
-      Track revenue, free quota burn, top referrers, and last paid events seconds after they happen.
+      Track revenue, quota burn, top referrers, and paid events seconds after they happen.
     </p>
   </div>
+  <p class="analytics-note" data-animate="fade-up" data-animate-delay="60">
+    Sample dashboard for illustration — sign in to view live metrics.
+  </p>
   <div class="analytics-grid">
-    <article class="analytics-panel analytics-panel--summary">
+    <article class="analytics-panel analytics-panel--summary" data-animate="fade-up">
       <header>
         <span class="analytics-chip analytics-chip--live">Live data</span>
-        <strong>$1,482.30</strong>
-        <span class="analytics-caption">Past 7 days, net USDC routed</span>
+        <p class="analytics-caption analytics-caption--inline">Past 7 days, net USDC routed</p>
       </header>
-      <ul>
+      <strong class="analytics-value">$1,482.30</strong>
+      <ul class="panel-body">
         <li>
           <span>Paid requests (24h)</span>
           <span>3,482</span>
@@ -1258,24 +1270,24 @@ const homeAnalytics = html`<section class="section section--analytics">
         </li>
       </ul>
     </article>
-    <article class="analytics-panel analytics-panel--trend">
+    <article class="analytics-panel analytics-panel--trend" data-animate="fade-up" data-animate-delay="90">
       <header>
         <span class="analytics-chip">Daily trend</span>
-        <span class="analytics-caption">Requests per day</span>
+        <span class="analytics-caption analytics-caption--inline">Requests per day</span>
       </header>
-      <div class="analytics-chart">
-        <div class="chart-placeholder">Trend chart ships with Plot.js in Phase 3.</div>
+      <div class="analytics-chart panel-body" data-trend-chart>
+        <span class="sr-only">Sample daily trend chart preview</span>
       </div>
       <footer>
         <span>Top referrer</span>
         <strong>agents.sol402.app</strong>
       </footer>
     </article>
-    <article class="analytics-panel analytics-panel--activity">
+    <article class="analytics-panel analytics-panel--activity" data-animate="fade-up" data-animate-delay="180">
       <header>
         <span class="analytics-chip">Recent activity</span>
       </header>
-      <ul class="activity-feed">
+      <ul class="activity-feed panel-body">
         <li>
           <span>Paid • arxiv.pdf</span>
           <time>34s ago</time>
@@ -1298,12 +1310,19 @@ const homeAnalytics = html`<section class="section section--analytics">
   </div>
 </section>`;
 
-const homeToken = html`<section class="section section--token">
+const homeToken = html`<section class="section section--token" data-animate="fade-up" data-animate-delay="140">
   <div class="section__header">
     <h2>Make SOL402 work for you</h2>
     <p class="section__subhead">
       Token holders unlock instant onboarding, discounts, and roadmap perks. Contract:
-      <code class="token-ca">HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump</code>
+      <a
+        class="token-ca"
+        href="https://dexscreener.com/solana/6h8d1kjngp2ainxzv4bud9hpdlkb1zdydrpfom1b8a8k"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump
+      </a>
     </p>
   </div>
   <div class="tier-grid">
@@ -1339,49 +1358,7 @@ const homeToken = html`<section class="section section--token">
     </article>
   </div>
 </section>`;
-
-const homeTestimonials = html`<section class="section section--testimonials">
-  <div class="section__header">
-    <h2>Trusted by teams monetizing the agent economy</h2>
-    <p class="section__subhead">
-      Builders on Solana are already paywalling research dumps, inference endpoints, and premium feeds.
-    </p>
-  </div>
-  <div class="testimonial-strip">
-    <article class="testimonial-card">
-      <p>
-        “Sol402 let us gate our inference API without building auth from scratch. Agents pay the 402 and
-        retry like it was native.”
-      </p>
-      <footer>
-        <span>Nova Agents</span>
-        <small>Inference marketplace</small>
-      </footer>
-    </article>
-    <article class="testimonial-card">
-      <p>
-        “We wrapped our research PDFs behind Sol402 and saw immediate USDC flow without touching the
-        origin. The dashboard is instant.”
-      </p>
-      <footer>
-        <span>Archive Labs</span>
-        <small>Knowledge base</small>
-      </footer>
-    </article>
-    <article class="testimonial-card">
-      <p>
-        “Token holders get fast-tracked onboarding, and the automated quotas keep ops simple. Feels built
-        for the x402 meta.”
-      </p>
-      <footer>
-        <span>Pulse RPC</span>
-        <small>API infrastructure</small>
-      </footer>
-    </article>
-  </div>
-</section>`;
-
-const homeCta = html`<section class="cta-band">
+const homeCta = html`<section class="cta-band" data-animate="fade-up" data-animate-delay="220">
   <div class="cta-band__content">
     <h2>Ready to monetize every request?</h2>
     <p>
@@ -1399,7 +1376,7 @@ const homeCta = html`<section class="cta-band">
   </div>
 </section>`;
 
-const renderHome: RenderFn = () =>
+export const renderHome: RenderFn = () =>
   renderPage({
     title: 'Sol402 — Turn any URL or API into a pay-per-request endpoint',
     description:
@@ -1408,7 +1385,7 @@ const renderHome: RenderFn = () =>
     ogDescription: 'x402-native payments. USDC on Solana. Ship in minutes.',
     path: '/',
     analyticsEvent: 'view_home',
-    content: html`${homeHero}${homeSocialProof}${homeHowItWorks}${homeFeatureGrid}${homeAnalytics}${homeToken}${homeTestimonials}${homeCta}`,
+    content: html`${homeHero}${homeSocialProof}${homeHowItWorks}${homeFeatureGrid}${homeAnalytics}${homeToken}${homeCta}`,
   });
 
 const renderApi: RenderFn = () =>
@@ -1486,7 +1463,8 @@ paymentMiddleware(payTo, {
 
 const pricingHero = html`<section class="section pricing-hero">
   <div class="pricing-hero__grid">
-    <div class="pricing-hero__copy">
+    <div class="pricing-hero__copy" data-animate="fade-up">
+      ${brandBadge('hero', { decorative: true })}
       <span class="eyebrow">Pricing</span>
       <h1>Only pay when a request clears</h1>
       <p class="subhead">
@@ -1502,7 +1480,7 @@ const pricingHero = html`<section class="section pricing-hero">
         </a>
       </div>
     </div>
-    <aside class="pricing-hero__capsule">
+    <aside class="pricing-hero__capsule" data-animate="scale-in" data-animate-delay="180">
       <header>
         <span class="pricing-chip">Base rate</span>
         <strong>$0.005</strong>
@@ -3368,7 +3346,8 @@ const renderPricing: RenderFn = () =>
 
 
 const tokenHero = html`<section class="section section--token">
-  <div class="section__header">
+  <div class="section__header" data-animate="fade-up">
+    ${brandBadge('section', { decorative: true })}
     <h2>Make SOL402 work for you</h2>
     <p class="section__subhead">
       Token holders unlock instant onboarding, discounts, and roadmap perks. Contract:
@@ -3376,7 +3355,7 @@ const tokenHero = html`<section class="section section--token">
     </p>
   </div>
   <div class="tier-grid">
-    <article class="tier-card tier-card--baseline">
+    <article class="tier-card tier-card--baseline" data-animate="fade-up">
       <header>
         <span class="pill pill--baseline">Baseline · ≥1M SOL402</span>
       </header>
@@ -3386,7 +3365,7 @@ const tokenHero = html`<section class="section section--token">
         <li>5 free calls per wallet daily</li>
       </ul>
     </article>
-    <article class="tier-card tier-card--growth">
+    <article class="tier-card tier-card--growth" data-animate="fade-up" data-animate-delay="100">
       <header>
         <span class="pill pill--growth">Growth · ≥2M SOL402</span>
       </header>
@@ -3396,7 +3375,7 @@ const tokenHero = html`<section class="section section--token">
         <li>Priority RPC and retry lanes</li>
       </ul>
     </article>
-    <article class="tier-card tier-card--premium">
+    <article class="tier-card tier-card--premium" data-animate="fade-up" data-animate-delay="200">
       <header>
         <span class="pill pill--premium">Premium · ≥5M SOL402</span>
       </header>
@@ -3410,7 +3389,7 @@ const tokenHero = html`<section class="section section--token">
 </section>`;
 
 const tokenUtility = html`<section class="section section--features">
-  <div class="section__header">
+  <div class="section__header" data-animate="fade-up">
     <h2>Utility now, not promises</h2>
     <p class="section__subhead">
       The moment your wallet holds SOL402, we fast-track onboarding, unlock quotas, and apply discounts
@@ -3418,7 +3397,7 @@ const tokenUtility = html`<section class="section section--features">
     </p>
   </div>
   <div class="feature-grid">
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up">
       <h3>Automation on day one</h3>
       <p>Connect once and mint scoped credentials with no human review.</p>
       <ul>
@@ -3426,7 +3405,7 @@ const tokenUtility = html`<section class="section section--features">
         <li>3 live links, 200 paid calls/day, 5 free calls/day</li>
       </ul>
     </article>
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up" data-animate-delay="100">
       <h3>Discounts + throughput</h3>
       <p>Hold ≥2M tokens to trigger the 25% discount and higher rate limits.</p>
       <ul>
@@ -3434,7 +3413,7 @@ const tokenUtility = html`<section class="section section--features">
         <li>Priority RPC retries + enhanced rate limits</li>
       </ul>
     </article>
-    <article class="feature-card">
+    <article class="feature-card" data-animate="fade-up" data-animate-delay="200">
       <h3>Premium automation</h3>
       <p>Operate at scale with direct analytics exports and automation hooks.</p>
       <ul>

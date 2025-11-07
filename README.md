@@ -158,6 +158,7 @@ Minted a link already? Visit [sol402.app/dashboard](https://sol402.app/dashboard
   ```
   Set `ANALYTICS_SINK_URL` to the HTTPS endpoint, `ANALYTICS_SINK_DATABASE=sol402`, `ANALYTICS_SINK_TABLE=analytics_events`, and provide auth via `ANALYTICS_SINK_AUTH_HEADER`.
 - Webhook health uses the same table. The Worker emits `webhook_delivery_success` and `webhook_delivery_failure` events (props: `{ merchantAddress, linkId, webhookUrl, responseStatus, latencyMs, attempt, errorMessage, paid, priceUsd }`) after each dispatch. Ensure the analytics exporter reaches ClickHouse so `/dashboard/webhooks` can display 24h success/failure counts and recent delivery history.
+- The public home page hero pulls these ClickHouse aggregates plus a live SPL supply snapshot each time it renders. Keep the exporter healthy and the Solana RPC configured so visitors see up-to-date request counts, settled USDC, and circulating SOL402 totals.
 - Token holder discount RPC calls emit metrics to `RPC_METRICS_URL` so you can monitor Extrnode latency and failure rates. Provide an auth header via `RPC_METRICS_AUTH_HEADER` if your sink requires it. For Grafana Cloud Loki, set `RPC_METRICS_URL=https://logs-prod-028.grafana.net/loki/api/v1/push` and `RPC_METRICS_AUTH_HEADER=Basic <base64("1374949:<grafana-token>")>`.
 
 ## Project Structure

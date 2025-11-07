@@ -142,4 +142,37 @@ describe('AnalyticsMetricsService', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
+
+  it('loads global summary metrics and caches the result', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        createClickHouseResponse([
+          {
+            requestsTotal: 128,
+            paidCallsTotal: 96,
+            freeCallsTotal: 32,
+            revenueUsdTotal: 4.82,
+            paidCalls24h: 24,
+            freeCalls24h: 8,
+            revenueUsd24h: 1.25,
+            discountApplied24h: 6,
+            freeQuotaUsed24h: 5,
+          },
+        ])
+      )
+    );
+
+    const service = new AnalyticsMetricsService(config, {
+      fetchFn: fetchMock,
+      cacheTtlMs: 10_000,
+    });
+
+    const summary = await service.getGlobalSummary();
+    expect(summary.requestsTotal).toBe(128);
+    expect(summary.revenueUsdTotal).toBeCloseTo(4.82);
+    expect(summary.discountApplied24h).toBe(6);
+
+    await service.getGlobalSummary();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

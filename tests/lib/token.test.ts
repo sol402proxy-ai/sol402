@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Connection } from '@solana/web3.js';
 import type { AppConfig } from '../../src/config.js';
 import { TokenPerksService } from '../../src/lib/token.js';
@@ -195,7 +195,7 @@ describe('TokenPerksService', () => {
     const service = new TestTokenPerksService(
       {
         ...baseConfig,
-        tokenMint: 'TokenMint11111111111111111111111111111111',
+        tokenMint: 'HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump',
         freeCallsPerWalletPerDay: 0,
       },
       0
@@ -289,5 +289,61 @@ describe('TokenPerksService', () => {
     expect(discounted.priceAtomic).toBe(9_000n);
     expect(discounted.discountApplied).toBe(true);
     expect(discounted.reason).toBe('holder-discount');
+  });
+
+  it('returns null token supply when no mint is configured', async () => {
+    const service = new TokenPerksService({
+      ...baseConfig,
+      tokenMint: '',
+    });
+
+    const supply = await service.getTokenSupply();
+    expect(supply).toBeNull();
+  });
+
+  it('fetches and caches token supply snapshots', async () => {
+    const getTokenSupply = vi.fn().mockResolvedValue({
+      value: {
+        amount: '1230000000',
+        decimals: 6,
+        uiAmount: 1230,
+        uiAmountString: '1230',
+      },
+    });
+
+    const warn = vi.fn();
+    const debug = vi.fn();
+
+    const service = new TokenPerksService(
+      {
+        ...baseConfig,
+        tokenMint: 'HsnyqiEdMVn9qsJaj4EsE4WmEN6eih6zhK6c4TjBpump',
+      },
+      {
+        connection: {
+          getTokenSupply,
+        } as unknown as Connection,
+        cacheTtlMs: 10,
+        logger: {
+          warn,
+          debug,
+          info: vi.fn(),
+          error: vi.fn(),
+        },
+      }
+    );
+
+    const first = await service.getTokenSupply();
+    expect(first?.uiAmount).toBeCloseTo(1230);
+    expect(first?.uiAmountString).toBe('1230');
+    expect(getTokenSupply).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+
+    const cached = await service.getTokenSupply();
+    expect(cached?.uiAmount).toBeCloseTo(1230);
+    expect(getTokenSupply).toHaveBeenCalledTimes(1);
+
+    await service.getTokenSupply({ fresh: true });
+    expect(getTokenSupply).toHaveBeenCalledTimes(2);
   });
 });
